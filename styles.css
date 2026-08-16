@@ -1,0 +1,122 @@
+/* =========================================================================
+   チップはグループ先頭メンバーの .workspace-tab-header の内側に入る．
+   ストリップの子要素数を変えないことで，Obsidian 本体のドロップ位置計算に
+   干渉しないようにしている (実測でストリップ直下への挿入は index に影響する).
+   ========================================================================= */
+
+.workspace-tab-header.tb-chip-host {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tb-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--radius-s);
+  background-color: color-mix(in srgb, var(--tb-color) 18%, transparent);
+  color: var(--tb-color);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.tb-chip:hover {
+  background-color: color-mix(in srgb, var(--tb-color) 30%, transparent);
+}
+
+.tb-chip:focus-visible {
+  outline: 2px solid var(--tb-color);
+  outline-offset: 1px;
+}
+
+/* ドラッグ中のタブがチップ上にあるとき */
+.tb-chip.tb-drop-target {
+  background-color: color-mix(in srgb, var(--tb-color) 45%, transparent);
+  box-shadow: 0 0 0 2px var(--tb-color);
+}
+
+.tb-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--tb-color);
+  flex: 0 0 auto;
+}
+
+.tb-chip-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-chip-count {
+  padding: 0 5px;
+  border-radius: var(--radius-s);
+  background-color: color-mix(in srgb, var(--tb-color) 32%, transparent);
+}
+
+/* ---- グループに属するタブ ---- */
+.workspace-tab-header.tb-member {
+  position: relative;
+  background-color: color-mix(in srgb, var(--tb-color) 9%, transparent);
+}
+
+.workspace-tab-header.tb-member::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background-color: var(--tb-color);
+}
+
+.workspace-tab-header.tb-first::after {
+  border-start-start-radius: 2px;
+  left: 3px;
+}
+
+.workspace-tab-header.tb-last::after {
+  border-start-end-radius: 2px;
+  right: 3px;
+}
+
+/* ---- 折りたたみ ----
+   チップはホストのタブヘッダの内側にいるので，ホストごと display:none に
+   すると自分自身が消える．ホストは残してタイトル部分だけを畳む． */
+.workspace-tab-header.tb-collapsed:not(.tb-chip-host) {
+  display: none;
+}
+
+
+
+
+
+.workspace-tab-header.tb-chip-host.tb-collapsed::after {
+  content: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tb-chip {
+    transition: background-color 120ms ease-out, box-shadow 120ms ease-out;
+  }
+}
+
+/* 折りたたみ時はタブ列に余裕があるので，名前を切り詰めない */
+
+/* 折りたたみ時: チップは色ドットのみ．バンド名はタブのタイトルに出す
+   (幅の計算を本体に任せ，CSS で幅を操作しない) */
+.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip-name,
+.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip-count {
+  display: none;
+}
+
+.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip {
+  padding: 2px 4px;
+}
