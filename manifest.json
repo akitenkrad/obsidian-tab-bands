@@ -2,7 +2,7 @@
   "id": "tab-bands",
   "name": "Tab Bands",
   "version": "0.1.0",
-  "minAppVersion": "1.5.0",
+  "minAppVersion": "1.7.0",
   "description": "Organize the tab strip into named, colour-coded, collapsible bands.",
   "author": "akitenkrad",
   "isDesktopOnly": true
