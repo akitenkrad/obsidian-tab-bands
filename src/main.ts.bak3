@@ -153,29 +153,6 @@ export default class TabBandsPlugin extends Plugin {
     this.decorator?.destroy();
   }
 
-  // ---------- 非公式 API の保護 ----------
-
-  /**
-   * 非公式 API を触る処理を包む．
-   *
-   * 本プラグインの最優先事項は「壊れても Obsidian 本体を壊さない」こと．
-   * 装飾が出なくなるのは許容するが，タブの並びやレイアウトの破損は許容しない．
-   * 失敗は握り潰すが，同じラベルにつき 1 度だけ console.error に残す．
-   */
-  private reportedFailures = new Set<string>();
-
-  private safely<T>(label: string, fn: () => T, fallback: T): T {
-    try {
-      return fn();
-    } catch (err) {
-      if (!this.reportedFailures.has(label)) {
-        this.reportedFailures.add(label);
-        console.error(`[tab-bands] ${label} に失敗しました．Obsidian の内部構造が変わった可能性があります．`, err);
-      }
-      return fallback;
-    }
-  }
-
   // ---------- 状態の確定 ----------
 
   /**
@@ -273,7 +250,6 @@ export default class TabBandsPlugin extends Plugin {
 
     if (target === result.originParent) {
       // 同一ペイン内: リーフは動かさず，children と DOM の並びだけ直す
-      this.normalizeCollapsedDrop(target, host);
       this.gatherGroup(target, group.id, host);
       await this.persist();
       return;
@@ -302,16 +278,10 @@ export default class TabBandsPlugin extends Plugin {
     for (const [offset, leaf] of leaves.entries()) {
       const viewState = leaf.getViewState();
       const ephemeral = leaf.getEphemeralState();
-      const created = this.safely(
-        "リーフの移送",
-        () =>
-          this.app.workspace.createLeafInParent(
-            target as unknown as Parameters<typeof this.app.workspace.createLeafInParent>[0],
-            startIndex + offset,
-          ),
-        null as WorkspaceLeaf | null,
+      const created = this.app.workspace.createLeafInParent(
+        target as unknown as Parameters<typeof this.app.workspace.createLeafInParent>[0],
+        startIndex + offset,
       );
-      if (!created) break; // 途中で失敗したら残りは動かさない
       await created.setViewState(viewState);
       created.setEphemeralState(ephemeral);
       newIds.push(created.id);
@@ -415,129 +385,41 @@ export default class TabBandsPlugin extends Plugin {
 
   /**
    * 同一バンドのタブを隣接させる．
-   *
    * WorkspaceParent.children は非公開 API なので，配列と DOM の両方を
    * 手で同期させたうえで requestSaveLayout() を呼ぶ．
    * この関数だけが「並びを書き換える」責務を持つ．
-   *
-   * anchorLeaf: 集約位置の基準．指定が無ければ「並び順で最初のメンバー」だが，
-   * ドラッグ時は動かしたリーフを基準にしないと元の位置へ引き戻される
-   * (右へ動かすと members[0] が別のメンバーに変わってしまうため).
    */
   private gatherGroup(
     parent: WorkspaceParent | undefined,
     groupId: string,
     anchorLeaf?: WorkspaceLeaf,
   ): void {
-    this.safely("バンドの並べ替え", () => {
-      const children = parent?.children as WorkspaceLeaf[] | undefined;
-      if (!children?.length) return;
+    const children = parent?.children as WorkspaceLeaf[] | undefined;
+    if (!children?.length) return;
 
-      const members = children.filter((leaf) => this.store.groupOf(leaf.id)?.id === groupId);
-      if (members.length < 2) return;
+    const members = children.filter((leaf) => this.store.groupOf(leaf.id)?.id === groupId);
+    if (members.length < 2) return;
 
-      // タブヘッダを持たないリーフがあると DOM 同期が途中で失敗し，
-      // children と表示が食い違ったまま残る．事前に弾く．
-      if (!children.every((leaf) => leaf?.tabHeaderEl instanceof HTMLElement)) {
-        throw new Error("tabHeaderEl を持たないリーフがあります");
-      }
+    // 集約位置の基準．指定が無ければ「並び順で最初のメンバー」だが，
+    // ドラッグ時は動かしたリーフを基準にしないと元の位置へ引き戻される
+    // (右へ動かすと members[0] が別のメンバーに変わってしまうため).
+    const pivot = anchorLeaf && members.includes(anchorLeaf) ? anchorLeaf : members[0];
+    const anchor = children.indexOf(pivot);
 
-      const pivot = anchorLeaf && members.includes(anchorLeaf) ? anchorLeaf : members[0];
-      const anchor = children.indexOf(pivot);
-      if (anchor < 0) throw new Error("基準リーフが children に含まれていません");
+    const rest = children.filter((leaf) => !members.includes(leaf));
+    // anchor は元の children 上の index なので，メンバーを除いた rest に
+    // そのまま使うとずれる．非メンバーだけを数え直す．
+    const beforeCount = children.slice(0, anchor).filter((leaf) => !members.includes(leaf)).length;
+    const ordered = [pivot, ...members.filter((leaf) => leaf !== pivot)];
+    const reordered = [...rest.slice(0, beforeCount), ...ordered, ...rest.slice(beforeCount)];
 
-      const rest = children.filter((leaf) => !members.includes(leaf));
-      // anchor は元の children 上の index なので，メンバーを除いた rest に
-      // そのまま使うとずれる．非メンバーだけを数え直す．
-      const beforeCount = children.slice(0, anchor).filter((leaf) => !members.includes(leaf)).length;
-      const ordered = [pivot, ...members.filter((leaf) => leaf !== pivot)];
-      const reordered = [...rest.slice(0, beforeCount), ...ordered, ...rest.slice(beforeCount)];
+    children.splice(0, children.length, ...reordered);
 
-      if (reordered.length !== children.length) {
-        throw new Error(`並べ替え後の要素数が一致しません (${reordered.length} vs ${children.length})`);
-      }
-
-      const strip = pivot.tabHeaderEl.parentElement;
-      if (!strip) throw new Error("タブストリップが見つかりません");
-
-      // DOM を先に同期する．appendChild の連続だとタブが一度末尾へ飛ぶので，
-      // 末尾から insertBefore で詰めていく．
-      let ref: HTMLElement | null = null;
-      for (let i = reordered.length - 1; i >= 0; i -= 1) {
-        const el = reordered[i].tabHeaderEl;
-        strip.insertBefore(el, ref);
-        ref = el;
-      }
-
-      // DOM が意図どおりになってから children を差し替える．
-      // 逆順にすると，DOM 同期が途中で失敗した場合に論理順序だけが進んで
-      // ラン判定と表示が食い違う (バンドが分断されて見える).
-      children.splice(0, children.length, ...reordered);
-
-      this.app.workspace.requestSaveLayout();
-      this.verifyOrder(parent as WorkspaceParent, strip);
-    }, undefined);
-  }
-
-  /**
-   * 折りたたんだ他バンドの内部に着地したホストを，そのバンドの後ろへ送る．
-   *
-   * 畳んだバンドはホスト以外が display:none なので，画面上は 1 タブ分の幅しかない．
-   * ユーザが「バンドの右」に落としても，本体は「先頭メンバーの直後」と解釈する．
-   * 実測: 学習 (5 タブ) の右へ落としたところ，並びが
-   *   [学習×1] [異常×6] [学習×4]
-   * となり，後段の集約で元の位置へ押し戻された．
-   *
-   * 視覚的な意図に合わせ，畳んだバンドは常に「またぐ」対象として扱う．
-   */
-  private normalizeCollapsedDrop(parent: WorkspaceParent, host: WorkspaceLeaf): void {
-    this.safely("ドロップ位置の補正", () => {
-      const children = parent.children as WorkspaceLeaf[];
-      const index = children.indexOf(host);
-      if (index <= 0) return;
-
-      const own = this.store.groupOf(host.id)?.id;
-      const neighbour = this.store.groupOf(children[index - 1].id);
-      if (!neighbour || neighbour.id === own || !neighbour.collapsed) return;
-
-      // 隣接バンドのメンバーがホストより後ろにもいる = 内部に着地している
-      let last = index;
-      for (let i = index + 1; i < children.length; i += 1) {
-        if (this.store.groupOf(children[i].id)?.id === neighbour.id) last = i;
-      }
-      if (last <= index) return;
-
-      children.splice(index, 1);
-      children.splice(last, 0, host);
-
-      const strip = host.tabHeaderEl?.parentElement;
-      if (strip) {
-        const ref = (children[last + 1] as WorkspaceLeaf | undefined)?.tabHeaderEl ?? null;
-        strip.insertBefore(host.tabHeaderEl, ref);
-      }
-    }, undefined);
-  }
-
-  /**
-   * children (論理順序) と タブストリップ (表示順序) の一致を検査する．
-   *
-   * ランの判定は children から行い，チップの描画は DOM に対して行うため，
-   * ここが食い違うと「同じバンドのチップが 2 箇所に出る」等の症状になる．
-   * 不整合はプラグイン単体では原因を特定できないので，検出できたら記録する．
-   */
-  private verifyOrder(parent: WorkspaceParent, strip: HTMLElement): void {
-    const logical = (parent.children as WorkspaceLeaf[]).map((leaf) => leaf.id);
-    const visual = [...strip.children]
-      .filter((el): el is HTMLElement => el instanceof HTMLElement && el.hasClass("workspace-tab-header"))
-      .map((el) => (parent.children as WorkspaceLeaf[]).find((leaf) => leaf.tabHeaderEl === el)?.id ?? "?");
-
-    if (logical.join(",") === visual.join(",")) return;
-    if (this.reportedFailures.has("順序の不整合")) return;
-    this.reportedFailures.add("順序の不整合");
-    console.error(
-      "[tab-bands] children と DOM の並びが一致しません．この情報を MYTASK-2898 に添付してください．",
-      { logical, visual },
-    );
+    const strip = members[0].tabHeaderEl?.parentElement;
+    if (strip) {
+      for (const leaf of reordered) strip.appendChild(leaf.tabHeaderEl);
+    }
+    this.app.workspace.requestSaveLayout();
   }
 }
 
