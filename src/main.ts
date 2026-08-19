@@ -22,6 +22,12 @@ export default class TabBandsPlugin extends Plugin {
   private knownLeafIds = new Set<string>();
   /** 直前にアクティブだったリーフ ID (アクティブが「動いた」かの判定に使う) */
   private lastActiveLeafId: string | undefined;
+  /**
+   * 逃げ先が無いまま畳まれ，畳んだバンドの中に取り残されたタブ．
+   * フォーカスが戻ってきただけでバンドを開き直さないために覚えておく．
+   * セッション限りの状態でよい (起動時は onLayoutReady の退避で入り直す).
+   */
+  private trappedLeafIds = new Set<string>();
   private refresh = debounce(() => this.rerender(), 30, true);
 
   async onload(): Promise<void> {
@@ -509,10 +515,24 @@ export default class TabBandsPlugin extends Plugin {
   private revealActiveBand(): boolean {
     const active = this.app.workspace.getMostRecentLeaf();
     const group = active ? this.store.groupOf(active.id) : undefined;
-    if (!group?.collapsed) return false;
+    if (!active) return false;
+    if (!group?.collapsed) {
+      // 畳まれていないバンドに居るなら，もう「取り残されて」いない
+      this.trappedLeafIds.delete(active.id);
+      return false;
+    }
+    // 取り残されたタブへフォーカスが戻ってきただけ．畳んだ状態を保つ
+    if (this.trappedLeafIds.has(active.id)) return false;
+
     this.store.toggleCollapsed(group.id, false);
+    this.releaseTrapped(group);
     void this.persist();
     return true;
+  }
+
+  /** バンドを開いたら，その中に取り残されていた記録は捨てる */
+  private releaseTrapped(group: TabGroup): void {
+    for (const id of group.leafIds) this.trappedLeafIds.delete(id);
   }
 
   /**
@@ -532,7 +552,13 @@ export default class TabBandsPlugin extends Plugin {
       const g = this.store.groupOf(leaf.id);
       return g?.id !== group.id && !g?.collapsed;
     });
-    if (!escape) return;
+    if (!escape) {
+      // ペイン内が畳んだバンドだけになる場合．畳むこと自体は許し，アクティブは
+      // 中に留める (エディタは直前のノートを表示し続ける)．代わりに，戻って
+      // きたときに開き直さないよう覚えておく．
+      this.trappedLeafIds.add(active.id);
+      return;
+    }
     this.app.workspace.setActiveLeaf(escape, { focus: false });
     this.lastActiveLeafId = escape.id;
   }
@@ -566,7 +592,8 @@ export default class TabBandsPlugin extends Plugin {
 
   private toggleCollapse(group: TabGroup): void {
     // 畳んでからでは「アクティブが隠れた」状態が一瞬できてしまう．先に逃がす．
-    if (!group.collapsed) this.evacuateActive(group);
+    if (group.collapsed) this.releaseTrapped(group);
+    else this.evacuateActive(group);
     this.store.toggleCollapsed(group.id);
     void this.persist();
   }
