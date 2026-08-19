@@ -96,8 +96,6 @@ export class TabStripDecorator {
         i = j + 1;
       }
     }
-
-    this.ensureActiveLeafVisible();
   }
 
   private renderRun(group: TabGroup, run: WorkspaceLeaf[]): void {
@@ -246,18 +244,6 @@ export class TabStripDecorator {
       item.setTitle("グループ内のタブを閉じる").setIcon("x").onClick(() => this.cb.onCloseGroup(group)),
     );
     menu.showAtMouseEvent(evt);
-  }
-
-  /** 折りたたまれたグループの中にアクティブタブがある状態は作らない */
-  private ensureActiveLeafVisible(): void {
-    const active = this.app.workspace.getMostRecentLeaf();
-    if (!active) return;
-    const group = this.store.groupOf(active.id);
-    if (!group?.collapsed) return;
-
-    const siblings = (active.parent?.children ?? []) as WorkspaceLeaf[];
-    const escape = siblings.find((leaf) => leaf !== active && !this.store.groupOf(leaf.id)?.collapsed);
-    if (escape) this.app.workspace.setActiveLeaf(escape, { focus: false });
   }
 
   /**

@@ -20,6 +20,8 @@ export default class TabBandsPlugin extends Plugin {
   private pending: PendingAssignment | null = null;
   /** 直前の layout-change 時点で存在していたリーフ ID */
   private knownLeafIds = new Set<string>();
+  /** 直前にアクティブだったリーフ ID (アクティブが「動いた」かの判定に使う) */
+  private lastActiveLeafId: string | undefined;
   private refresh = debounce(() => this.rerender(), 30, true);
 
   async onload(): Promise<void> {
@@ -59,12 +61,18 @@ export default class TabBandsPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.knownLeafIds = new Set(this.rootLeaves().map((l) => l.id));
       this.store.reconcile(this.rootLeaves());
+      // 前回の終了時にアクティブだったタブが畳んだバンドの中にあることがある．
+      // 起動時は「保存された折りたたみ状態」を尊重し，アクティブの方を逃がす．
+      const active = this.app.workspace.getMostRecentLeaf();
+      this.lastActiveLeafId = active?.id;
+      const group = active ? this.store.groupOf(active.id) : undefined;
+      if (group?.collapsed) this.evacuateActive(group);
       void this.store.save();
       this.rerender();
     });
 
     this.registerEvent(this.app.workspace.on("layout-change", () => this.onLayoutChange()));
-    this.registerEvent(this.app.workspace.on("active-leaf-change", this.refresh));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onActiveLeafChange()));
 
     // タブの右クリックメニュー (source === "tab-header") にバンド操作を足す
     this.registerEvent(
@@ -143,7 +151,10 @@ export default class TabBandsPlugin extends Plugin {
       id: "collapse-all-groups",
       name: "すべてのバンドを折りたたむ",
       callback: () => {
-        for (const g of this.store.groups) this.store.toggleCollapsed(g.id, true);
+        for (const g of this.store.groups) {
+          if (!g.collapsed) this.evacuateActive(g);
+          this.store.toggleCollapsed(g.id, true);
+        }
         void this.persist();
       },
     });
@@ -461,6 +472,71 @@ export default class TabBandsPlugin extends Plugin {
     return allRootLeaves(this.app);
   }
 
+  // ---------- アクティブタブと折りたたみ ----------
+
+  /**
+   * 「アクティブなタブは画面から隠れていてはならない」を保つ．
+   *
+   * この状態になる経路は 2 つあり，あるべき解決が逆になる．
+   *
+   * | 経路 | 解決 |
+   * | --- | --- |
+   * | バンドを畳んだ (アクティブは動いていない) | アクティブを外へ逃がす |
+   * | ユーザーが畳んだバンドのメンバーへ移動した | バンドを開く |
+   *
+   * 両者は「アクティブなリーフが変わったか」で区別できる．畳む操作では
+   * アクティブは動かないので，変化を伴わない再描画でバンドを開いてはならない
+   * (「すべてのバンドを折りたたむ」が片っ端から開き直されてしまう).
+   */
+  private onActiveLeafChange(): void {
+    const active = this.app.workspace.getMostRecentLeaf();
+    const moved = active?.id !== this.lastActiveLeafId;
+    this.lastActiveLeafId = active?.id;
+    // 展開すると persist() 経由で再描画されるので，重ねて refresh しない
+    if (moved && this.revealActiveBand()) return;
+    this.refresh();
+  }
+
+  /**
+   * アクティブなタブが畳んだバンドの中にあるなら，そのバンドを開く．
+   *
+   * 畳んだバンドのメンバーはタブヘッダが display:none なので，リンクや
+   * Quick switcher からそのノートへ移動しても画面に出てこない．Chrome と
+   * 同じく，移動先のバンドを開いて見せる．
+   *
+   * 展開したら true．
+   */
+  private revealActiveBand(): boolean {
+    const active = this.app.workspace.getMostRecentLeaf();
+    const group = active ? this.store.groupOf(active.id) : undefined;
+    if (!group?.collapsed) return false;
+    this.store.toggleCollapsed(group.id, false);
+    void this.persist();
+    return true;
+  }
+
+  /**
+   * バンドを畳む前に，その中にアクティブなタブがあれば外へ逃がす．
+   *
+   * 逃げ先は「同じペインにいて，畳まれておらず，これから畳むバンドにも
+   * 属さない」タブ．見つからなければ何もしない (アクティブは畳んだバンドの
+   * 中に留まる — MYTASK-2889 で挙動を決める).
+   */
+  private evacuateActive(group: TabGroup): void {
+    const active = this.app.workspace.getMostRecentLeaf();
+    if (!active || this.store.groupOf(active.id)?.id !== group.id) return;
+
+    const siblings = (active.parent?.children ?? []) as WorkspaceLeaf[];
+    const escape = siblings.find((leaf) => {
+      if (leaf === active) return false;
+      const g = this.store.groupOf(leaf.id);
+      return g?.id !== group.id && !g?.collapsed;
+    });
+    if (!escape) return;
+    this.app.workspace.setActiveLeaf(escape, { focus: false });
+    this.lastActiveLeafId = escape.id;
+  }
+
   /** 無名バンドの表示用ラベル */
   private label(group: TabGroup): string {
     return groupLabel(group);
@@ -489,6 +565,8 @@ export default class TabBandsPlugin extends Plugin {
   }
 
   private toggleCollapse(group: TabGroup): void {
+    // 畳んでからでは「アクティブが隠れた」状態が一瞬できてしまう．先に逃がす．
+    if (!group.collapsed) this.evacuateActive(group);
     this.store.toggleCollapsed(group.id);
     void this.persist();
   }
