@@ -118,16 +118,16 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 `members[0]` が別のメンバーに変わり，元の位置へ引き戻される．
 ドラッグ経由では第 3 引数でホストを渡している．
 
-**ペイン移動でリーフを作り直している．** 直接 reparent する公開 API が無いため，
-`createLeafInParent()` + `setViewState()` + `detach()` で移送している
-(`relocate`)．`leafId` が変わるので `GroupStore.remap()` で貼り替える．
-なお `WorkspaceParent` には `insertChild` / `removeChild` が存在するので，
-これに置き換えれば `leafId` と未保存状態を保てる (未検証).
+**ペイン移動はまずリーフを直接付け替える．** `WorkspaceParent.insertChild` /
+`removeChild` (非公式 API) で reparent すると `leafId` と未保存状態を保てる
+(`reparent`)．非公式なので，まず 1 枚だけ動かして `children` と DOM の両方に
+着地したかを検証し (`hasLanded`)，駄目なら元へ戻して
+`createLeafInParent()` + `setViewState()` + `detach()` の旧方式へ落ちる
+(`recreate`)．旧方式では `leafId` が変わるので `GroupStore.remap()` で
+貼り替える (`fingerprints` も一緒に引き継ぐ)．
 
 ## 既知の制限 / TODO
 
-- [ ] `relocate()` を `insertChild` / `removeChild` に置き換える (leafId と未保存状態の保持)
-- [ ] `remap()` で `fingerprints` も貼り替える (再起動時の復元経路が現状やや弱い)
 - [ ] バンド末尾のメンバーから開いた新規タブの吸収 (Chrome は吸収する)
 - [ ] 展開状態のバンドのドラッグ移動 (「1 枚だけ動かす」操作と区別できない)
 - [ ] チップ自体のドラッグでバンドごと並び替え (親タブの `dragstart` と競合する)

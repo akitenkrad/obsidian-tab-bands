@@ -148,13 +148,42 @@ export class GroupStore {
     this.data.groups.remove(group);
   }
 
-  /** バンドのメンバーを新しい leafId 群で置き換える (ペイン移動時に使う) */
-  remap(groupId: string, leafIds: string[]): void {
+  /**
+   * バンドのメンバーを新しい leafId 群で置き換える (ペイン移動時に使う).
+   *
+   * previousIds には leafIds と**同じ並び**で移動前の ID を渡す．同じ位置の
+   * 旧 ID が持っていた fingerprint を新 ID へ引き継ぎ，使われなくなった旧
+   * エントリを捨てる．引き継がないと，ペイン移動したバンドだけ起動時の
+   * reconcile() でファイルパスから復元できなくなる．
+   *
+   * 省略時は現在の leafIds を移動前の ID と見なすが，store の並びは
+   * タブの並びと一致する保証が無いので，呼び出し元は明示的に渡すこと．
+   */
+  remap(groupId: string, leafIds: string[], previousIds?: string[]): void {
     const group = this.byId(groupId);
     if (!group) return;
+    this.remapFingerprints(previousIds ?? group.leafIds, leafIds);
     for (const id of group.leafIds) this.index.delete(id);
     group.leafIds = leafIds;
     for (const id of leafIds) this.index.set(id, groupId);
+  }
+
+  /**
+   * 位置で対応づけて fingerprint を旧 ID から新 ID へ移す．
+   * 対応する相手がいない余りは触らない (どのリーフに対応するか決められないため．
+   * 残っても起動時の reconcile() が掃除する).
+   */
+  private remapFingerprints(previousIds: string[], leafIds: string[]): void {
+    const kept = new Set(leafIds);
+    const paired = Math.min(previousIds.length, leafIds.length);
+    for (let i = 0; i < paired; i += 1) {
+      const from = previousIds[i];
+      const to = leafIds[i];
+      if (from === to) continue; // 直接の付け替えでは ID が変わらない
+      const fingerprint = this.data.fingerprints[from];
+      if (fingerprint) this.data.fingerprints[to] = fingerprint;
+      if (!kept.has(from)) delete this.data.fingerprints[from];
+    }
   }
 
   rename(groupId: string, name: string): void {

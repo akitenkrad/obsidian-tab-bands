@@ -280,20 +280,114 @@ export default class TabBandsPlugin extends Plugin {
     }
 
     const hostIndex = target.children.indexOf(host);
+    const previousIds = rest.map((leaf) => leaf.id);
     const newIds = await this.relocate(rest, target, hostIndex + 1);
-    this.store.remap(group.id, [host.id, ...newIds]);
+    this.store.remap(group.id, [host.id, ...newIds], [host.id, ...previousIds]);
     for (const id of newIds) this.knownLeafIds.add(id);
     await this.persist();
     new Notice(`「${this.label(group)}」の ${newIds.length + 1} タブを移動しました`);
   }
 
   /**
-   * リーフ群を別のタブグループへ移す．
+   * リーフ群を別のタブグループへ移し，移動後の leafId を順に返す．
    *
-   * リーフを直接 reparent する公開 API は無いので，移動先に新しいリーフを作って
-   * viewState を移し替え，元を detach する．新しい leafId を順に返す．
+   * 第一候補は insertChild / removeChild による直接の付け替え (非公式 API)．
+   * leafId が保たれるので未保存の編集もスクロール位置も失われず，store の
+   * 貼り替えも実質不要になる．非公式 API なので，使えない場合や期待どおりに
+   * 動かない場合は，リーフを作り直す旧方式へ落ちる．
    */
   private async relocate(
+    leaves: WorkspaceLeaf[],
+    target: WorkspaceParent,
+    startIndex: number,
+  ): Promise<string[]> {
+    if (!leaves.length) return [];
+    if (this.canReparent(leaves, target)) {
+      const moved = this.reparent(leaves, target, startIndex);
+      if (moved) return moved;
+    }
+    return this.recreate(leaves, target, startIndex);
+  }
+
+  /** 非公式 API なので，使う直前に生きているか確かめる */
+  private canReparent(leaves: WorkspaceLeaf[], target: WorkspaceParent): boolean {
+    return (
+      typeof target.insertChild === "function" &&
+      leaves.every((leaf) => typeof leaf.parent?.removeChild === "function")
+    );
+  }
+
+  /**
+   * リーフを別のタブグループへ直接付け替える．
+   *
+   * まず 1 枚目だけを動かして結果を検証し，狙いどおりでなければ元へ戻して
+   * null を返す (呼び出し元が旧方式へ落ちる)．引数の順序や containerEl の
+   * 扱いが Obsidian 側で変わっても，タブが宙に浮いた状態にはしない．
+   */
+  private reparent(leaves: WorkspaceLeaf[], target: WorkspaceParent, startIndex: number): string[] | null {
+    const [first, ...rest] = leaves;
+    const origin = first.parent;
+    const originIndex = origin ? (origin.children as WorkspaceLeaf[]).indexOf(first) : -1;
+
+    const landed = this.safely(
+      "リーフの付け替え",
+      () => {
+        this.moveChild(first, target, startIndex);
+        return this.hasLanded(first, target);
+      },
+      false,
+    );
+
+    if (!landed) {
+      // removeChild が通ったあとに insertChild が投げると，leaf.parent は
+      // 移動元を指したままリーフだけがどこにも属さなくなる．parent の値では
+      // なく，移動元に収まっているかどうかで巻き戻しの要否を決める．
+      this.safely(
+        "付け替えの巻き戻し",
+        () => {
+          if (origin && originIndex >= 0 && !this.hasLanded(first, origin)) {
+            this.moveChild(first, origin, originIndex);
+          }
+        },
+        undefined,
+      );
+      return null;
+    }
+
+    // 1 枚目が通れば残りも同じ経路で動く
+    for (const [offset, leaf] of rest.entries()) {
+      this.safely("リーフの付け替え", () => this.moveChild(leaf, target, startIndex + 1 + offset), undefined);
+    }
+    this.app.workspace.requestSaveLayout();
+    return leaves.map((leaf) => leaf.id);
+  }
+
+  private moveChild(leaf: WorkspaceLeaf, target: WorkspaceParent, index: number): void {
+    leaf.parent?.removeChild?.(leaf);
+    target.insertChild?.(index, leaf);
+  }
+
+  /**
+   * 付け替えが実際に効いたかを確かめる．
+   *
+   * children だけでなく DOM も見る．insertChild がタブヘッダと
+   * リーフ本体の containerEl を一緒に運んでくれるかは保証が無く，
+   * 運ばれていなければ「論理的には移動したが画面に出ない」状態になるため．
+   */
+  private hasLanded(leaf: WorkspaceLeaf, target: WorkspaceParent): boolean {
+    return (
+      leaf.parent === target &&
+      (target.children as WorkspaceLeaf[]).includes(leaf) &&
+      target.containerEl.contains(leaf.tabHeaderEl) &&
+      target.containerEl.contains(leaf.containerEl)
+    );
+  }
+
+  /**
+   * 旧方式: 移動先に新しいリーフを作って viewState を移し替え，元を detach する．
+   * leafId が変わるので呼び出し元で store の貼り替えが要る．
+   */
+  private async recreate(
     leaves: WorkspaceLeaf[],
     target: WorkspaceParent,
     startIndex: number,
@@ -336,16 +430,17 @@ export default class TabBandsPlugin extends Plugin {
   /**
    * バンドのメンバーをまとめて別のタブグループへ移す．
    *
-   * リーフを直接 reparent する公開 API は無いので，移動先に新しいリーフを作って
-   * viewState を移し替え，元を detach する．leafId が変わるので store を remap する．
+   * relocate() は付け替えに成功すれば同じ leafId を，作り直しに落ちれば新しい
+   * leafId を返す．どちらでも store の並びを移動後の ID で貼り替える．
    */
   private async moveBandTo(group: TabGroup, target: WorkspaceParent): Promise<void> {
     const members = this.rootLeaves().filter((l) => this.store.groupOf(l.id)?.id === group.id);
     if (!members.length) return;
 
+    const previousIds = members.map((leaf) => leaf.id);
     const newIds = await this.relocate(members, target, target.children.length);
-    this.store.remap(group.id, newIds);
-    // 移動で作り直したリーフは「新出」だが吸収対象にしてはいけない
+    this.store.remap(group.id, newIds, previousIds);
+    // 作り直しに落ちた場合，そのリーフは「新出」だが吸収対象にしてはいけない
     for (const id of newIds) this.knownLeafIds.add(id);
     await this.persist();
     new Notice(`「${this.label(group)}」の ${newIds.length} タブを移動しました`);

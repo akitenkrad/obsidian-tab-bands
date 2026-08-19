@@ -28,6 +28,14 @@ declare module "obsidian" {
     containerEl: HTMLElement;
     /** WorkspaceTabs のみ．指定リーフをアクティブタブにする */
     selectTab?(leaf: WorkspaceLeaf): void;
+    /**
+     * 子アイテムを index の位置に差し込む．
+     * 引数の順序も containerEl を一緒に運ぶかも保証が無いので，
+     * 呼んだあとに必ず結果を検証すること (main.ts の hasLanded).
+     */
+    insertChild?(index: number, item: WorkspaceItem, resize?: boolean): void;
+    /** 子アイテムを外す．insertChild と対で使う */
+    removeChild?(item: WorkspaceItem): void;
   }
 
   interface Workspace {
