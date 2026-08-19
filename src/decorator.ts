@@ -1,5 +1,5 @@
 import { App, Menu, WorkspaceLeaf, WorkspaceParent } from "obsidian";
-import { COLOR_ORDER, GROUP_COLORS, GroupStore, TabGroup } from "./store";
+import { COLOR_ORDER, GROUP_COLORS, groupLabel, GroupStore, TabGroup } from "./store";
 import { tabGroups } from "./workspace-tree";
 
 export interface DecoratorCallbacks {
@@ -135,7 +135,7 @@ export class TabStripDecorator {
         if (titleEl.dataset.tbOriginal === undefined) {
           titleEl.dataset.tbOriginal = titleEl.textContent ?? "";
         }
-        titleEl.textContent = `${group.name.trim() || "バンド"} (${run.length})`;
+        titleEl.textContent = `${groupLabel(group)} (${run.length})`;
       } else if (titleEl.dataset.tbOriginal !== undefined) {
         titleEl.textContent = titleEl.dataset.tbOriginal;
         delete titleEl.dataset.tbOriginal;
@@ -150,14 +150,18 @@ export class TabStripDecorator {
     chip.setAttribute("role", "button");
     chip.setAttribute("tabindex", "0");
     chip.setAttribute("aria-expanded", String(!group.collapsed));
-    chip.setAttribute("aria-label", `${group.name} — ${group.collapsed ? "展開" : "折りたたむ"}`);
+    chip.setAttribute("aria-label", `${groupLabel(group)} — ${group.collapsed ? "展開" : "折りたたむ"}`);
     // 親のタブヘッダは draggable なので，チップ自身のドラッグは明示的に殺す
     chip.setAttribute("draggable", "false");
 
     chip.createSpan({ cls: "tb-chip-dot" });
-    // 無名バンドではラベル要素を作らない (色ドットだけのチップにする)
+    // 無名バンドでもラベル要素は作る．テキストは空のまま CSS で最小幅だけ与え，
+    // チップが色ドットだけに潰れないようにする (幅の指定はチップに対しては効く．
+    // 効かないのはタブヘッダ側で，そちらは折りたたみ時にタイトルを上書きして回避している).
     const name = group.name.trim();
-    if (name) chip.createSpan({ cls: "tb-chip-name", text: name });
+    const nameEl = chip.createSpan({ cls: "tb-chip-name" });
+    if (name) nameEl.setText(name);
+    else nameEl.addClass("tb-chip-name-empty");
     if (group.collapsed) chip.createSpan({ cls: "tb-chip-count", text: String(memberCount) });
     if (group.collapsed) chip.addClass("tb-chip-collapsed");
 

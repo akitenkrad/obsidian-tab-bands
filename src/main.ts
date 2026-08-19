@@ -10,7 +10,7 @@ import {
 } from "obsidian";
 import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
-import { GroupStore, TabGroup } from "./store";
+import { groupLabel, GroupStore, TabGroup } from "./store";
 import { allRootLeaves, leafById, tabGroups } from "./workspace-tree";
 
 export default class TabBandsPlugin extends Plugin {
@@ -368,7 +368,7 @@ export default class TabBandsPlugin extends Plugin {
 
   /** 無名バンドの表示用ラベル */
   private label(group: TabGroup): string {
-    return group.name.trim() || "バンド";
+    return groupLabel(group);
   }
 
   private rerender(): void {
@@ -382,7 +382,8 @@ export default class TabBandsPlugin extends Plugin {
   }
 
   private addToNewGroup(leaf: WorkspaceLeaf): void {
-    const group = this.store.createGroup(""); // 既定は無名．チップは色ドットのみ
+    // 既定名は GroupStore 側で `Tab-N` の連番を採番する
+    const group = this.store.createGroup();
     this.addToGroup(leaf, group.id);
   }
 

@@ -57,6 +57,14 @@
   text-overflow: ellipsis;
 }
 
+/* 無名バンド: 空のラベル要素をプレースホルダとして残し，`Tab-X` 相当
+   (5 文字) の幅を確保する．これがないとチップが色ドットだけに潰れる．
+   min-width はチップ (タブヘッダの内側) には効く — 効かないのはタブヘッダ
+   自身の幅で，折りたたみ時はタイトル上書きでそちらを回避している． */
+.tb-chip-name-empty {
+  min-width: 5ch;
+}
+
 .tb-chip-count {
   padding: 0 5px;
   border-radius: var(--radius-s);

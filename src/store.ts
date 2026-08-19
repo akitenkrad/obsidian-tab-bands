@@ -29,6 +29,11 @@ export interface TabGroup {
   leafIds: string[];
 }
 
+/** 無名バンドの表示用ラベル (名前は空にできる仕様なのでフォールバックが要る) */
+export function groupLabel(group: TabGroup): string {
+  return group.name.trim() || "バンド";
+}
+
 /**
  * leafId は workspace.json に永続化されるので再起動をまたいで概ね安定するが，
  * 「ワークスペース切り替え」や手動編集で失われることがある．
@@ -84,7 +89,27 @@ export class GroupStore {
     return this.data.groups.find((g) => g.id === groupId);
   }
 
-  createGroup(name = "New group"): TabGroup {
+  /**
+   * 既定名は `Tab-1`, `Tab-2`, ... の連番．
+   * 既存バンドの名前を見て**未使用の最小番号**を選ぶので，削除したバンドの
+   * 番号は再利用される (`Tab-1`, `Tab-3` があれば次は `Tab-2`).
+   *
+   * 走査対象は `Tab-<正の整数>` に完全一致する名前だけ．`Tab-A` や `Tab-01`
+   * のようなユーザが手で付けた名前は採番に影響させない.
+   */
+  private nextDefaultName(): string {
+    const used = new Set<number>();
+    for (const g of this.data.groups) {
+      const m = /^Tab-([1-9]\d*)$/.exec(g.name.trim());
+      if (m) used.add(Number(m[1]));
+    }
+    let n = 1;
+    while (used.has(n)) n += 1;
+    return `Tab-${n}`;
+  }
+
+  /** name を省略すると `Tab-N` の連番が入る．明示的に "" を渡せば無名になる */
+  createGroup(name: string = this.nextDefaultName()): TabGroup {
     const used = new Set(this.data.groups.map((g) => g.color));
     const color = COLOR_ORDER.find((c) => !used.has(c)) ?? COLOR_ORDER[this.data.groups.length % COLOR_ORDER.length];
     const group: TabGroup = {
