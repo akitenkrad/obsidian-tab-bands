@@ -275,8 +275,13 @@ export default class TabBandsPlugin extends Plugin {
     }
     const group = this.store.groupOf(host.id);
     const target = host.parent;
-    if (!group?.collapsed || !target) {
+    if (!target) {
       this.refresh();
+      return;
+    }
+    if (!group?.collapsed) {
+      // 展開状態のタブ 1 枚の移動．落ちた位置から参加先を決める
+      if (!this.joinBandAtDrop(host, target)) this.refresh();
       return;
     }
 
@@ -303,6 +308,54 @@ export default class TabBandsPlugin extends Plugin {
     for (const id of newIds) this.knownLeafIds.add(id);
     await this.persist();
     new Notice(`「${this.label(group)}」の ${newIds.length + 1} タブを移動しました`);
+  }
+
+  /**
+   * ドラッグしたタブ 1 枚を，落ちた位置のバンドへ参加させる．
+   *
+   * 判定は「**左右の隣が同一のバンドのメンバーである**」の一点だけ．この式は
+   * 仕様で決めた 3 つのケースを自然に満たす:
+   *
+   * | ドロップ位置 | 結果 |
+   * | --- | --- |
+   * | 別バンドのメンバーに挟まれた位置 | そのバンドに参加する |
+   * | バンドの外 (末尾の 1 つ右を含む) | 何もしない．離脱はさせない |
+   * | バンドとバンドの境界 | どちらにも参加しない |
+   *
+   * 離脱を実装しないのは，「外に出た」が「どのバンドにも挟まれていない」と
+   * 同じ判定になり，バンド末尾の 1 つ右に落とした場合と区別できないため．
+   * 離脱は明示操作 (右クリック → バンドから外す) に限る．
+   *
+   * 【対象を広げないこと】かつて並び順からペイン内全リーフの membership を
+   * 推論するルール (inferMembershipFromOrder) を入れたところ，バンド端のタブを
+   * 外へドラッグしたときに間のタブを芋づる式に取り込んだ (実測)．対象は必ず
+   * 「そのドラッグで動いた 1 枚」に限る．
+   *
+   * 参加させたら true．
+   */
+  private joinBandAtDrop(leaf: WorkspaceLeaf, parent: WorkspaceParent): boolean {
+    // チップへのドロップは参加先が確定しているので，こちらは手を出さない
+    if (this.pending) return false;
+
+    const children = parent.children as WorkspaceLeaf[];
+    const index = children.indexOf(leaf);
+    if (index <= 0 || index >= children.length - 1) return false; // 両隣が要る
+
+    const left = this.store.groupOf(children[index - 1].id);
+    const right = this.store.groupOf(children[index + 1].id);
+    if (!left || left.id !== right?.id) return false; // バンドの外 / 境界
+    if (left.id === this.store.groupOf(leaf.id)?.id) return false; // 同じバンド内の並べ替え
+    // 畳んだバンドに入れるとそのタブがその場で消えて見える．
+    // 畳んだバンドへ入れる導線はチップへのドロップに任せる．
+    if (left.collapsed) return false;
+
+    const from = this.store.groupOf(leaf.id);
+    this.store.assign(leaf, left.id);
+    // 元のバンドが分断されていたら整合させる (空になって消えた場合は何もしない)
+    if (from && this.store.byId(from.id)) this.gatherGroup(parent, from.id);
+    this.gatherGroup(parent, left.id);
+    void this.persist();
+    return true;
   }
 
   /**
