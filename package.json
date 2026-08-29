@@ -1,6 +1,6 @@
 {
   "name": "obsidian-tab-bands",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Named, colour-coded, collapsible tab bands",
   "scripts": {
