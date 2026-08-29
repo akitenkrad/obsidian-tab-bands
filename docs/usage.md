@@ -36,6 +36,20 @@ Both apply only to a tab that is **newly opened at that moment**. Moving an
 existing tab never changes its membership: inferring membership from position
 alone causes runaway absorption (see [Internals](internals.md)).
 
+## Settings
+
+Settings → Community plugins → **Tab Bands** (the gear icon).
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Band name width | 12 | Maximum width of the band name on a chip, in characters (4–32). Lower it when your theme makes the tab strip feel cramped. The name is ellipsised beyond it; the chip of an unnamed band is unaffected |
+| Absorb newly opened tabs | on | Turns off both cases described above at once. With it off, a tab only joins a band by hand (drag, or the context menu) |
+
+Everything else is fixed: the colour of a new band is auto-assigned from unused
+colours, and a collapsed band shows `Band name (N)`. The reasons are in
+[Internals](internals.md). The settings are stored in the same `data.json` as the
+bands.
+
 ## Known limitations
 
 - Dragging the chip itself to reorder a whole band (it conflicts with the parent

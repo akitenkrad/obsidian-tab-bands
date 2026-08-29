@@ -33,11 +33,22 @@
   in the DOM, which is what makes that case work). A modifier key or dragging the
   chip itself would disambiguate it, but right-click the chip → Move to pane N is
   enough in practice. Kept as is after use (2026-08-29).
-- **There are no settings.** The default colour is auto-assigned from unused
-  colours, the chip name width is fixed in CSS (`max-width: 12ch`), and the
-  collapsed title format is fixed as `Band name (N)`. If a real need to adjust one
-  of these shows up, it will be exposed through Obsidian's settings screen
-  (`PluginSettingTab`) at that point (2026-08-29).
+- **Settings are few, and they live in Obsidian's own settings screen.** Two are
+  exposed through `PluginSettingTab` (`src/settings-tab.ts`): the band name width
+  on a chip, which a theme can make too cramped, and an on/off switch for
+  absorbing newly opened tabs, which is the only automatic change of membership.
+  The default colour (auto-assigned from unused colours) and the collapsed title
+  format (`Band name (N)`) are **not** exposed: the first would turn into an
+  "auto or fixed" choice, and the second would need placeholder validation and
+  escaping — neither has caused an observed problem (2026-08-29).
+- **The settings live in `data.json`, next to the bands.** `saveData()` replaces
+  the whole file, so a second writer would erase the first one's content.
+  `GroupStore` stays the only writer and holds the settings under a `settings`
+  key beside `version` / `groups` / `fingerprints`. Values are put through
+  `normalizeSettings()` on load, because `data.json` is editable by hand and
+  older versions wrote no settings at all. The chip name width reaches the CSS as
+  a variable **set on the chip element** (`--tb-chip-name-max-width`); setting it
+  on `document.body` would not reach popout windows.
 - **A drop on a chip inserts at the head of the band** (Chrome appends to the
   tail). The chip lives inside the first member's tab header, so Obsidian reads a
   drop there as "the left half of the first member" and carries the tab to just
@@ -160,7 +171,9 @@ is put back and the old path of `createLeafInParent()` + `setViewState()` +
 | `src/drag.ts` | Watching drags: detecting drops on chips, reporting drag results |
 | `src/i18n.ts` | UI text dictionary (English / Japanese) |
 | `src/rules.ts` | Membership decisions (pure functions; touch neither Obsidian nor the DOM) |
-| `src/store.ts` | Band state and persistence |
+| `src/settings.ts` | Settings: types, defaults, normalization (pure; touches neither Obsidian nor the DOM) |
+| `src/settings-tab.ts` | The settings screen (`PluginSettingTab`) |
+| `src/store.ts` | Band state, settings and persistence |
 | `src/workspace-tree.ts` | Leaf enumeration by walking `children` (replaces `iterate*Leaves`); also walks popouts |
 | `src/obsidian-internals.d.ts` | Type declarations for unofficial APIs |
 | `test/` | Unit tests (vitest); `obsidian` is replaced with a stub |

@@ -29,7 +29,8 @@ npm test         # 単体テスト (vitest)
 | --- | --- |
 | `test/i18n.test.ts` | 表示言語の選択，差し込み，辞書の網羅 |
 | `test/rules.test.ts` | 新規タブの吸収，ドロップでの参加，折りたたみ時の逃げ先．**誤吸収しないこと**を厚めに |
-| `test/store.test.ts` | 採番・色の割り当て・assign/unassign・remap の fingerprint 引き継ぎ・reconcile の復元 |
+| `test/settings.test.ts` | 設定の正規化．既定値，可動域への丸め，型の違う値の切り捨て |
+| `test/store.test.ts` | 採番・色の割り当て・assign/unassign・remap の fingerprint 引き継ぎ・reconcile の復元・設定の読み書き |
 | `test/workspace-tree.test.ts` | 木の走査，タブ順，ポップアウト (`floatingSplit`) の取り込み |
 | `test/obsidian-stub.ts` | `obsidian` の代役．`WorkspaceLeaf` は `instanceof` 判定のため実クラスで持つ |
 | `test/setup.ts` | Obsidian が生やす `Array.prototype.remove()` の補完 |

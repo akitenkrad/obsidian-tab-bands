@@ -1,5 +1,6 @@
 import type { Plugin, WorkspaceLeaf } from "obsidian";
 import { t } from "./i18n";
+import { DEFAULT_SETTINGS, normalizeSettings, type TabBandsSettings } from "./settings";
 
 /**
  * バンドの色パレット (9 色).
@@ -49,9 +50,23 @@ export interface GroupsData {
   version: 1;
   groups: TabGroup[];
   fingerprints: Record<string, LeafFingerprint>;
+  /**
+   * 設定 (定義は settings.ts)．
+   *
+   * data.json の書き手を GroupStore 1 つに保つため，別ファイルにはせず
+   * ここに同居させている．`saveData()` はファイルを丸ごと置き換えるので，
+   * 書き手が 2 つあると後から書いた方が相手の内容を消す．
+   * `version` / `groups` / `fingerprints` の形は変えていない．
+   */
+  settings: TabBandsSettings;
 }
 
-const DEFAULT_DATA: GroupsData = { version: 1, groups: [], fingerprints: {} };
+const DEFAULT_DATA: GroupsData = {
+  version: 1,
+  groups: [],
+  fingerprints: {},
+  settings: DEFAULT_SETTINGS,
+};
 
 export class GroupStore {
   private data: GroupsData = structuredClone(DEFAULT_DATA);
@@ -63,6 +78,9 @@ export class GroupStore {
   async load(): Promise<void> {
     const raw = (await this.plugin.loadData()) as Partial<GroupsData> | null;
     this.data = { ...structuredClone(DEFAULT_DATA), ...(raw ?? {}) };
+    // 展開しただけでは，設定を持たない過去の data.json や手で壊された値が
+    // そのまま入る．設定だけは必ず正規化を通す．
+    this.data.settings = normalizeSettings(raw?.settings);
     this.reindex();
   }
 
@@ -79,6 +97,15 @@ export class GroupStore {
 
   get groups(): readonly TabGroup[] {
     return this.data.groups;
+  }
+
+  get settings(): Readonly<TabBandsSettings> {
+    return this.data.settings;
+  }
+
+  /** 変更ぶんだけを渡す．保存は呼び出し元が save() で行う */
+  updateSettings(patch: Partial<TabBandsSettings>): void {
+    this.data.settings = normalizeSettings({ ...this.data.settings, ...patch });
   }
 
   groupOf(leafId: string): TabGroup | undefined {

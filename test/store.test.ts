@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Plugin, WorkspaceLeaf as ObsidianLeaf } from "obsidian";
 import { COLOR_ORDER, GroupStore, groupLabel, type GroupsData } from "../src/store";
+import { CHIP_NAME_WIDTH, DEFAULT_SETTINGS } from "../src/settings";
 import { moment, WorkspaceLeaf } from "./obsidian-stub";
 
 /** loadData / saveData だけを持つ最小のプラグイン代役 */
@@ -250,7 +251,8 @@ describe("reconcile (起動時の照合)", () => {
 
 describe("load", () => {
   it("保存済みデータから逆引きを張り直す", async () => {
-    const stored: GroupsData = {
+    // 設定を持たない (= 0.3.0 以前が書いた) data.json を想定する
+    const stored: Omit<GroupsData, "settings"> = {
       version: 1,
       groups: [{ id: "g1", name: "Docs", color: "blue", collapsed: true, leafIds: ["L1", "L2"] }],
       fingerprints: { L1: { viewType: "markdown", path: "a.md" } },
@@ -264,5 +266,54 @@ describe("load", () => {
   it("空の data.json でも既定値で立ち上がる", async () => {
     const { store } = await newStore(null);
     expect(store.groups).toEqual([]);
+  });
+});
+
+describe("設定の永続化", () => {
+  it("設定を持たない data.json は既定値で埋める", async () => {
+    const { store } = await newStore({ version: 1, groups: [], fingerprints: {} });
+    expect(store.settings).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("保存済みの設定を読む", async () => {
+    const { store } = await newStore({
+      version: 1,
+      groups: [],
+      fingerprints: {},
+      settings: { chipNameMaxWidth: 20, absorbNewTabs: false },
+    });
+    expect(store.settings.chipNameMaxWidth).toBe(20);
+    expect(store.settings.absorbNewTabs).toBe(false);
+  });
+
+  it("壊れた値は読み込み時に正規化する", async () => {
+    const { store } = await newStore({
+      version: 1,
+      groups: [],
+      fingerprints: {},
+      settings: { chipNameMaxWidth: 999, absorbNewTabs: "yes" },
+    });
+    expect(store.settings.chipNameMaxWidth).toBe(CHIP_NAME_WIDTH.max);
+    expect(store.settings.absorbNewTabs).toBe(DEFAULT_SETTINGS.absorbNewTabs);
+  });
+
+  it("更新は差分だけを渡せる", async () => {
+    const { store, state } = await newStore();
+    store.updateSettings({ absorbNewTabs: false });
+    const saved = await snapshot(store, state);
+    expect(saved.settings).toEqual({ ...DEFAULT_SETTINGS, absorbNewTabs: false });
+  });
+
+  it("設定を保存してもバンドの形は変わらない", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup("Docs");
+    store.assign(leaf("L1", "a.md"), g.id);
+    store.updateSettings({ chipNameMaxWidth: 8 });
+
+    const saved = await snapshot(store, state);
+    expect(saved.version).toBe(1);
+    expect(saved.groups).toHaveLength(1);
+    expect(saved.groups[0].leafIds).toEqual(["L1"]);
+    expect(saved.fingerprints.L1).toEqual({ viewType: "markdown", path: "a.md" });
   });
 });

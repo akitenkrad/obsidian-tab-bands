@@ -60,8 +60,10 @@
   flex: 0 0 auto;
 }
 
+/* 幅は設定から来る (decorator.ts がチップに --tb-chip-name-max-width を載せる).
+   フォールバックの 12ch は settings.ts の DEFAULT_SETTINGS と揃えること． */
 .tb-chip-name {
-  max-width: 12ch;
+  max-width: var(--tb-chip-name-max-width, 12ch);
   overflow: hidden;
   text-overflow: ellipsis;
 }

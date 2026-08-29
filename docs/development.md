@@ -29,7 +29,8 @@ on a real install, so the tests cover **the Obsidian-independent logic only**.
 | --- | --- |
 | `test/i18n.test.ts` | Language selection, interpolation, dictionary coverage |
 | `test/rules.test.ts` | Absorbing new tabs, joining on drop, the escape target when collapsing. Weighted towards **not absorbing the wrong tab** |
-| `test/store.test.ts` | Numbering, colour assignment, assign/unassign, carrying fingerprints across `remap`, restoring in `reconcile` |
+| `test/settings.test.ts` | Normalizing settings: defaults, clamping to the allowed range, dropping values of the wrong type |
+| `test/store.test.ts` | Numbering, colour assignment, assign/unassign, carrying fingerprints across `remap`, restoring in `reconcile`, reading and writing settings |
 | `test/workspace-tree.test.ts` | Walking the tree, tab order, picking up popouts (`floatingSplit`) |
 | `test/obsidian-stub.ts` | Stands in for `obsidian`. `WorkspaceLeaf` is a real class because it is checked with `instanceof` |
 | `test/setup.ts` | Fills in `Array.prototype.remove()`, which Obsidian adds |

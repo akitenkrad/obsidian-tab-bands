@@ -15,8 +15,8 @@ are kept.
 > the public d.ts (`WorkspaceLeaf.id`, `WorkspaceParent.children`, …) and on
 > Obsidian's DOM structure, so an update to Obsidian can break it without notice.
 > If it breaks, decoration stops appearing, bands vanish on restart, or
-> collapsing stops working. **Your notes are never affected**: band state lives
-> only in the plugin folder's `data.json`, and disabling the plugin returns the
+> collapsing stops working. **Your notes are never affected**: band state and
+> settings live only in the plugin folder's `data.json`, and disabling the plugin returns the
 > tab strip to normal. The full list, with the symptom of each,
 > is in [Unofficial APIs](docs/unofficial-api.md).
 
@@ -38,7 +38,7 @@ that folder, which holds your bands.
 ## Docs
 
 - [Usage](docs/usage.md) — operations, band names, when a new tab joins a band,
-  known limitations
+  settings, known limitations
 - [Unofficial APIs](docs/unofficial-api.md) — what this plugin depends on and what
   breaks if each one goes away
 - [Internals](docs/internals.md) — design principles, what we measured about

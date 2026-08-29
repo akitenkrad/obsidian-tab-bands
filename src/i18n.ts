@@ -41,6 +41,17 @@ const EN = {
   actionCollapse: "collapse",
   unnamedBand: "Band",
 
+  // 設定画面
+  settingChipWidthName: "Band name width",
+  settingChipWidthDesc:
+    "Maximum width of the band name on a chip, counted in characters. " +
+    "Lower it when your theme makes the tab strip feel cramped.",
+  settingAbsorbName: "Absorb newly opened tabs",
+  settingAbsorbDesc:
+    "Add a new tab to a band when it opens between two of its members, " +
+    "or right after the member it was opened from. " +
+    "Turn this off to put every tab into a band by hand.",
+
   // 名前の変更ダイアログ
   renameTitle: "Rename band",
   renameNameLabel: "Name",
@@ -50,6 +61,10 @@ const EN = {
 
   // 移動先のペイン
   paneLabel: "Pane {n} ({title})",
+
+  // 通知 (Notice)
+  noticeMovedTabs: 'Moved {count} tabs of "{name}"',
+  noticeClosedTabs: 'Closed {count} tabs of "{name}"',
 
   // 診断 (開発者コンソール)
   diagFailure: "[tab-bands] {op} failed. Obsidian's internals may have changed.",
@@ -90,6 +105,16 @@ const JA: Record<Key, string> = {
   actionCollapse: "折りたたむ",
   unnamedBand: "バンド",
 
+  settingChipWidthName: "バンド名の幅",
+  settingChipWidthDesc:
+    "チップに出すバンド名の最大幅 (文字数)．" +
+    "テーマの都合でタブ列が窮屈なときは短くする．",
+  settingAbsorbName: "新しく開いたタブを吸収する",
+  settingAbsorbDesc:
+    "バンドのメンバーに挟まれた位置に開かれたタブと，" +
+    "メンバーから開かれたタブを，そのバンドに入れる．" +
+    "切ると，バンドへの追加はすべて手動になる．",
+
   renameTitle: "バンド名を変更",
   renameNameLabel: "名前",
   renameNameDesc: "空にすると色ドットのみのチップになります",
@@ -97,6 +122,9 @@ const JA: Record<Key, string> = {
   renameSave: "保存",
 
   paneLabel: "ペイン {n} ({title})",
+
+  noticeMovedTabs: "「{name}」の {count} タブを移動しました",
+  noticeClosedTabs: "「{name}」の {count} 個のタブを閉じました",
 
   diagFailure: "[tab-bands] {op} に失敗しました．Obsidian の内部構造が変わった可能性があります．",
   diagOrderMismatch:

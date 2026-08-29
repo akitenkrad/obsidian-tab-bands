@@ -13,10 +13,19 @@ import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
 import { groupLabel, GroupStore, TabGroup } from "./store";
 import { t } from "./i18n";
 import { absorptions, bandToJoinAtDrop, escapeTarget, type TabSlot } from "./rules";
+import { DEFAULT_SETTINGS, type TabBandsSettings } from "./settings";
+import { TabBandsSettingTab, type SettingsHost } from "./settings-tab";
 import { allTabLeaves, leafById, tabGroups } from "./workspace-tree";
 
-export default class TabBandsPlugin extends Plugin {
+export default class TabBandsPlugin extends Plugin implements SettingsHost {
   store!: GroupStore;
+  /**
+   * 設定の写し．正は `store` (data.json の書き手を 1 つに保つため) で，
+   * ここは読み取り用に持つ．`Plugin.settings` は本体が **プロパティ** として
+   * 宣言しているのでアクセサでは上書きできない (TS2611)．
+   * 書き換えるのは load 直後と updateSettings の 2 箇所だけ．
+   */
+  settings: Readonly<TabBandsSettings> = DEFAULT_SETTINGS;
   private decorator!: TabStripDecorator;
   private bridge!: TabDragBridge;
   private pending: PendingAssignment | null = null;
@@ -40,6 +49,8 @@ export default class TabBandsPlugin extends Plugin {
   async onload(): Promise<void> {
     this.store = new GroupStore(this);
     await this.store.load();
+    this.settings = this.store.settings;
+    this.addSettingTab(new TabBandsSettingTab(this.app, this));
 
     this.decorator = new TabStripDecorator(this.app, this.store, {
       onToggleCollapse: (g) => this.toggleCollapse(g),
@@ -250,9 +261,13 @@ export default class TabBandsPlugin extends Plugin {
   private absorbNewNeighbors(): boolean {
     let changed = false;
     const seen = new Set<string>();
+    const enabled = this.settings.absorbNewTabs;
 
     for (const [, leaves] of tabGroups(this.app)) {
+      // 設定で切っていても knownLeafIds の更新は続ける．飛ばすと，
+      // 設定を戻した直後に «既にあるタブ» を新出と誤判定する．
       for (const leaf of leaves) seen.add(leaf.id);
+      if (!enabled) continue;
 
       // 判断は rules.ts (純関数)．ここは結果を store に反映するだけ
       const decided = absorptions(this.slotsOf(leaves), {
@@ -339,7 +354,7 @@ export default class TabBandsPlugin extends Plugin {
     this.store.remap(group.id, [host.id, ...newIds], [host.id, ...previousIds]);
     for (const id of newIds) this.knownLeafIds.add(id);
     await this.persist();
-    new Notice(`「${this.label(group)}」の ${newIds.length + 1} タブを移動しました`);
+    new Notice(t("noticeMovedTabs", { name: this.label(group), count: newIds.length + 1 }));
   }
 
   /**
@@ -547,7 +562,7 @@ export default class TabBandsPlugin extends Plugin {
     // 作り直しに落ちた場合，そのリーフは「新出」だが吸収対象にしてはいけない
     for (const id of newIds) this.knownLeafIds.add(id);
     await this.persist();
-    new Notice(`「${this.label(group)}」の ${newIds.length} タブを移動しました`);
+    new Notice(t("noticeMovedTabs", { name: this.label(group), count: newIds.length }));
   }
 
   /** 右に新しいペインを作ってバンドを移す */
@@ -664,6 +679,15 @@ export default class TabBandsPlugin extends Plugin {
     this.rerender();
   }
 
+  // ---------- 設定 (settings-tab.ts の SettingsHost) ----------
+
+  /** 保存したうえで再描画する (チップ幅の変更をその場で見せるため) */
+  async updateSettings(patch: Partial<TabBandsSettings>): Promise<void> {
+    this.store.updateSettings(patch);
+    this.settings = this.store.settings;
+    await this.persist();
+  }
+
   private addToNewGroup(leaf: WorkspaceLeaf): void {
     // 既定名は GroupStore 側で `Tab-N` の連番を採番する
     const group = this.store.createGroup();
@@ -690,7 +714,7 @@ export default class TabBandsPlugin extends Plugin {
     for (const leaf of targets) leaf.detach();
     this.store.deleteGroup(group.id);
     await this.persist();
-    new Notice(`「${name}」の ${targets.length} 個のタブを閉じました`);
+    new Notice(t("noticeClosedTabs", { name, count: targets.length }));
   }
 
   private promptRename(group: TabGroup): void {

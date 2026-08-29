@@ -152,6 +152,9 @@ export class TabStripDecorator {
   private buildChip(group: TabGroup, memberCount: number): HTMLElement {
     const chip = createDiv({ cls: CHIP_CLASS });
     chip.style.setProperty("--tb-color", GROUP_COLORS[group.color]);
+    // 幅は CSS 変数でチップ自身に載せる．body に載せるとポップアウト
+    // ウィンドウ (別 document) に届かない．
+    chip.style.setProperty("--tb-chip-name-max-width", `${this.store.settings.chipNameMaxWidth}ch`);
     chip.dataset.tbGroup = group.id;
     chip.setAttribute("role", "button");
     chip.setAttribute("tabindex", "0");
