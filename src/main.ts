@@ -828,6 +828,12 @@ class RenameModal extends Modal {
           .setPlaceholder("(無名)")
           .onChange((v) => (this.value = v))
           .inputEl.addEventListener("keydown", (evt) => {
+            // IME の変換確定 Enter を拾わない．変換中の Enter も key === "Enter"
+            // で届くため，これを見ないと «変換を確定した瞬間にダイアログまで
+            // 確定される» (日本語入力では読みのままバンド名になる).
+            // isComposing と keyCode 229 の両方を見る (環境によりどちらか
+            // 一方しか立たないことがある).
+            if (evt.isComposing || evt.keyCode === 229) return;
             if (evt.key === "Enter") this.submit();
           }),
       );
