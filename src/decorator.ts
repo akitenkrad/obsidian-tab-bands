@@ -1,4 +1,5 @@
 import { App, Menu, WorkspaceLeaf, WorkspaceParent } from "obsidian";
+import { t } from "./i18n";
 import { COLOR_ORDER, GROUP_COLORS, groupLabel, GroupStore, TabGroup } from "./store";
 import { tabGroups } from "./workspace-tree";
 
@@ -155,7 +156,13 @@ export class TabStripDecorator {
     chip.setAttribute("role", "button");
     chip.setAttribute("tabindex", "0");
     chip.setAttribute("aria-expanded", String(!group.collapsed));
-    chip.setAttribute("aria-label", `${groupLabel(group)} — ${group.collapsed ? "展開" : "折りたたむ"}`);
+    chip.setAttribute(
+      "aria-label",
+      t("chipAria", {
+        name: groupLabel(group),
+        action: t(group.collapsed ? "actionExpand" : "actionCollapse"),
+      }),
+    );
     // 親のタブヘッダは draggable なので，チップ自身のドラッグは明示的に殺す
     chip.setAttribute("draggable", "false");
 
@@ -218,11 +225,11 @@ export class TabStripDecorator {
     const menu = new Menu();
     menu.addItem((item) =>
       item
-        .setTitle(group.collapsed ? "グループを展開" : "グループを折りたたむ")
+        .setTitle(t(group.collapsed ? "chipMenuExpand" : "chipMenuCollapse"))
         .setIcon(group.collapsed ? "chevron-right" : "chevron-down")
         .onClick(() => this.cb.onToggleCollapse(group)),
     );
-    menu.addItem((item) => item.setTitle("名前を変更").setIcon("pencil").onClick(() => this.cb.onRename(group)));
+    menu.addItem((item) => item.setTitle(t("chipMenuRename")).setIcon("pencil").onClick(() => this.cb.onRename(group)));
     menu.addSeparator();
     for (const color of COLOR_ORDER) {
       menu.addItem((item) =>
@@ -236,19 +243,19 @@ export class TabStripDecorator {
     for (const target of this.cb.listMoveTargets(group)) {
       menu.addItem((item) =>
         item
-          .setTitle(`${target.label} へ移動`)
+          .setTitle(t("chipMenuMoveTo", { target: target.label }))
           .setIcon("move-right")
           .onClick(() => this.cb.onMoveToPane(group, target.parent)),
       );
     }
     menu.addItem((item) =>
-      item.setTitle("新しいペインへ移動").setIcon("separator-vertical").onClick(() => this.cb.onMoveToNewPane(group)),
+      item.setTitle(t("chipMenuMoveToNewPane")).setIcon("separator-vertical").onClick(() => this.cb.onMoveToNewPane(group)),
     );
 
     menu.addSeparator();
-    menu.addItem((item) => item.setTitle("グループを解除").setIcon("ungroup").onClick(() => this.cb.onUngroup(group)));
+    menu.addItem((item) => item.setTitle(t("chipMenuUngroup")).setIcon("ungroup").onClick(() => this.cb.onUngroup(group)));
     menu.addItem((item) =>
-      item.setTitle("グループ内のタブを閉じる").setIcon("x").onClick(() => this.cb.onCloseGroup(group)),
+      item.setTitle(t("chipMenuCloseTabs")).setIcon("x").onClick(() => this.cb.onCloseGroup(group)),
     );
     menu.showAtMouseEvent(evt);
   }

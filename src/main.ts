@@ -11,6 +11,7 @@ import {
 import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
 import { groupLabel, GroupStore, TabGroup } from "./store";
+import { t } from "./i18n";
 import { absorptions, bandToJoinAtDrop, escapeTarget, type TabSlot } from "./rules";
 import { allTabLeaves, leafById, tabGroups } from "./workspace-tree";
 
@@ -100,7 +101,7 @@ export default class TabBandsPlugin extends Plugin {
         menu.addSeparator();
         menu.addItem((item) =>
           item
-            .setTitle("新しいバンドにまとめる")
+            .setTitle(t("tabMenuNewBand"))
             .setIcon("folder-plus")
             .onClick(() => this.addToNewGroup(leaf)),
         );
@@ -108,7 +109,7 @@ export default class TabBandsPlugin extends Plugin {
           if (g.id === current?.id) continue;
           menu.addItem((item) =>
             item
-              .setTitle(`バンド「${this.label(g)}」に追加`)
+              .setTitle(t("tabMenuAddToBand", { name: this.label(g) }))
               .setIcon("folder-input")
               .onClick(() => this.addToGroup(leaf, g.id)),
           );
@@ -116,7 +117,7 @@ export default class TabBandsPlugin extends Plugin {
         if (current) {
           menu.addItem((item) =>
             item
-              .setTitle("バンドから外す")
+              .setTitle(t("tabMenuRemoveFromBand"))
               .setIcon("folder-minus")
               .onClick(() => {
                 this.store.unassign(leaf.id);
@@ -129,7 +130,7 @@ export default class TabBandsPlugin extends Plugin {
 
     this.addCommand({
       id: "group-active-tab",
-      name: "アクティブタブを新しいバンドにまとめる",
+      name: t("cmdNewBand"),
       checkCallback: (checking) => {
         const leaf = this.app.workspace.getMostRecentLeaf();
         if (!leaf) return false;
@@ -140,7 +141,7 @@ export default class TabBandsPlugin extends Plugin {
 
     this.addCommand({
       id: "ungroup-active-tab",
-      name: "アクティブタブをバンドから外す",
+      name: t("cmdRemoveFromBand"),
       checkCallback: (checking) => {
         const leaf = this.app.workspace.getMostRecentLeaf();
         if (!leaf || !this.store.groupOf(leaf.id)) return false;
@@ -154,7 +155,7 @@ export default class TabBandsPlugin extends Plugin {
 
     this.addCommand({
       id: "toggle-active-group",
-      name: "アクティブタブのバンドを折りたたむ/展開する",
+      name: t("cmdToggleBand"),
       checkCallback: (checking) => {
         const leaf = this.app.workspace.getMostRecentLeaf();
         const group = leaf ? this.store.groupOf(leaf.id) : undefined;
@@ -166,7 +167,7 @@ export default class TabBandsPlugin extends Plugin {
 
     this.addCommand({
       id: "collapse-all-groups",
-      name: "すべてのバンドを折りたたむ",
+      name: t("cmdCollapseAll"),
       callback: () => {
         for (const g of this.store.groups) {
           if (!g.collapsed) this.evacuateActive(g);
@@ -198,7 +199,7 @@ export default class TabBandsPlugin extends Plugin {
     } catch (err) {
       if (!this.reportedFailures.has(label)) {
         this.reportedFailures.add(label);
-        console.error(`[tab-bands] ${label} に失敗しました．Obsidian の内部構造が変わった可能性があります．`, err);
+        console.error(t("diagFailure", { op: label }), err);
       }
       return fallback;
     }
@@ -423,7 +424,7 @@ export default class TabBandsPlugin extends Plugin {
     const originIndex = origin ? (origin.children as WorkspaceLeaf[]).indexOf(first) : -1;
 
     const landed = this.safely(
-      "リーフの付け替え",
+      t("opReparent"),
       () => {
         this.moveChild(first, target, startIndex);
         return this.hasLanded(first, target);
@@ -436,7 +437,7 @@ export default class TabBandsPlugin extends Plugin {
       // 移動元を指したままリーフだけがどこにも属さなくなる．parent の値では
       // なく，移動元に収まっているかどうかで巻き戻しの要否を決める．
       this.safely(
-        "付け替えの巻き戻し",
+        t("opReparentRollback"),
         () => {
           if (origin && originIndex >= 0 && !this.hasLanded(first, origin)) {
             this.moveChild(first, origin, originIndex);
@@ -449,7 +450,7 @@ export default class TabBandsPlugin extends Plugin {
 
     // 1 枚目が通れば残りも同じ経路で動く
     for (const [offset, leaf] of rest.entries()) {
-      this.safely("リーフの付け替え", () => this.moveChild(leaf, target, startIndex + 1 + offset), undefined);
+      this.safely(t("opReparent"), () => this.moveChild(leaf, target, startIndex + 1 + offset), undefined);
     }
     this.app.workspace.requestSaveLayout();
     return leaves.map((leaf) => leaf.id);
@@ -495,7 +496,7 @@ export default class TabBandsPlugin extends Plugin {
       const viewState = leaf.getViewState();
       const ephemeral = leaf.getEphemeralState();
       const created = this.safely(
-        "リーフの移送",
+        t("opCreateLeaf"),
         () =>
           this.app.workspace.createLeafInParent(
             target as unknown as Parameters<typeof this.app.workspace.createLeafInParent>[0],
@@ -525,7 +526,7 @@ export default class TabBandsPlugin extends Plugin {
       n += 1;
       if (parent === home) continue;
       if (homeContainer && parent.getContainer() !== homeContainer) continue;
-      out.push({ label: `ペイン ${n} (${leaves[0]?.getDisplayText() ?? ""})`, parent });
+      out.push({ label: t("paneLabel", { n, title: leaves[0]?.getDisplayText() ?? "" }), parent });
     }
     return out;
   }
@@ -715,7 +716,7 @@ export default class TabBandsPlugin extends Plugin {
     groupId: string,
     anchorLeaf?: WorkspaceLeaf,
   ): void {
-    this.safely("バンドの並べ替え", () => {
+    this.safely(t("opReorderBand"), () => {
       const children = parent?.children as WorkspaceLeaf[] | undefined;
       if (!children?.length) return;
 
@@ -725,12 +726,12 @@ export default class TabBandsPlugin extends Plugin {
       // タブヘッダを持たないリーフがあると DOM 同期が途中で失敗し，
       // children と表示が食い違ったまま残る．事前に弾く．
       if (!children.every((leaf) => leaf?.tabHeaderEl instanceof HTMLElement)) {
-        throw new Error("tabHeaderEl を持たないリーフがあります");
+        throw new Error("a leaf without tabHeaderEl");
       }
 
       const pivot = anchorLeaf && members.includes(anchorLeaf) ? anchorLeaf : members[0];
       const anchor = children.indexOf(pivot);
-      if (anchor < 0) throw new Error("基準リーフが children に含まれていません");
+      if (anchor < 0) throw new Error("the anchor leaf is not in children");
 
       const rest = children.filter((leaf) => !members.includes(leaf));
       // anchor は元の children 上の index なので，メンバーを除いた rest に
@@ -744,7 +745,7 @@ export default class TabBandsPlugin extends Plugin {
       }
 
       const strip = pivot.tabHeaderEl.parentElement;
-      if (!strip) throw new Error("タブストリップが見つかりません");
+      if (!strip) throw new Error("tab strip not found");
 
       // DOM を先に同期する．appendChild の連続だとタブが一度末尾へ飛ぶので，
       // 末尾から insertBefore で詰めていく．
@@ -777,7 +778,7 @@ export default class TabBandsPlugin extends Plugin {
    * 視覚的な意図に合わせ，畳んだバンドは常に「またぐ」対象として扱う．
    */
   private normalizeCollapsedDrop(parent: WorkspaceParent, host: WorkspaceLeaf): void {
-    this.safely("ドロップ位置の補正", () => {
+    this.safely(t("opFixDropPosition"), () => {
       const children = parent.children as WorkspaceLeaf[];
       const index = children.indexOf(host);
       if (index <= 0) return;
@@ -823,11 +824,10 @@ export default class TabBandsPlugin extends Plugin {
       .map((el) => (parent.children as WorkspaceLeaf[]).find((leaf) => leaf.tabHeaderEl === el)?.id ?? "?");
 
     if (logical.join(",") === visual.join(",")) return;
-    if (this.reportedFailures.has("順序の不整合")) return;
-    this.reportedFailures.add("順序の不整合");
+    if (this.reportedFailures.has("order-mismatch")) return;
+    this.reportedFailures.add("order-mismatch");
     console.error(
-      "[tab-bands] children と DOM の並びが一致しません．再現手順とこの出力を " +
-        "https://github.com/akitenkrad/obsidian-tab-bands/issues に報告してください．",
+      t("diagOrderMismatch"),
       { logical, visual },
     );
   }
@@ -846,14 +846,14 @@ class RenameModal extends Modal {
   }
 
   onOpen(): void {
-    this.titleEl.setText("バンド名を変更");
+    this.titleEl.setText(t("renameTitle"));
     new Setting(this.contentEl)
-      .setName("名前")
-      .setDesc("空にすると色ドットのみのチップになります")
+      .setName(t("renameNameLabel"))
+      .setDesc(t("renameNameDesc"))
       .addText((text) =>
         text
           .setValue(this.value)
-          .setPlaceholder("(無名)")
+          .setPlaceholder(t("renamePlaceholder"))
           .onChange((v) => (this.value = v))
           .inputEl.addEventListener("keydown", (evt) => {
             // IME の変換確定 Enter を拾わない．変換中の Enter も key === "Enter"
@@ -866,7 +866,7 @@ class RenameModal extends Modal {
           }),
       );
     new Setting(this.contentEl).addButton((btn) =>
-      btn.setButtonText("保存").setCta().onClick(() => this.submit()),
+      btn.setButtonText(t("renameSave")).setCta().onClick(() => this.submit()),
     );
   }
 

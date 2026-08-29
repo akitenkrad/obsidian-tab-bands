@@ -38,3 +38,15 @@ export class WorkspaceParent {
 
 export class App {}
 export class Plugin {}
+
+/**
+ * i18n が表示言語の判定に使う．本物の moment と同じく
+ * 引数なしで getter，引数ありで setter として振る舞う．
+ */
+let locale = "en";
+export const moment = {
+  locale(next?: string): string {
+    if (next !== undefined) locale = next;
+    return locale;
+  },
+};

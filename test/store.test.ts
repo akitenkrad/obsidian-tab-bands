@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Plugin, WorkspaceLeaf as ObsidianLeaf } from "obsidian";
 import { COLOR_ORDER, GroupStore, groupLabel, type GroupsData } from "../src/store";
-import { WorkspaceLeaf } from "./obsidian-stub";
+import { moment, WorkspaceLeaf } from "./obsidian-stub";
 
 /** loadData / saveData だけを持つ最小のプラグイン代役 */
 function fakePlugin(initial: unknown = null) {
@@ -70,7 +70,10 @@ describe("既定名の採番", () => {
     const { store } = await newStore();
     const g = store.createGroup("");
     expect(g.name).toBe("");
+    expect(groupLabel(g)).toBe("Band"); // 既定は英語
+    moment.locale("ja");
     expect(groupLabel(g)).toBe("バンド");
+    moment.locale("en");
   });
 });
 

@@ -1,4 +1,5 @@
 import type { Plugin, WorkspaceLeaf } from "obsidian";
+import { t } from "./i18n";
 
 /**
  * バンドの色パレット (9 色).
@@ -31,7 +32,7 @@ export interface TabGroup {
 
 /** 無名バンドの表示用ラベル (名前は空にできる仕様なのでフォールバックが要る) */
 export function groupLabel(group: TabGroup): string {
-  return group.name.trim() || "バンド";
+  return group.name.trim() || t("unnamedBand");
 }
 
 /**
