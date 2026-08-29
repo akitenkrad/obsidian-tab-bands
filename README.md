@@ -52,7 +52,20 @@ cd <vault>/.obsidian/plugins/tab-bands
 npm install
 npm run build    # 型チェック + production ビルド
 npm run dev      # watch ビルド (開発時)
+npm test         # 単体テスト (vitest)
 ```
+
+テストは `test/` にある．Obsidian の API に触る部分は実機でしか確かめられないので，
+**Obsidian 非依存の状態ロジックだけ**を対象にしている．
+
+| ファイル | 対象 |
+| --- | --- |
+| `test/store.test.ts` | 採番・色の割り当て・assign/unassign・remap の fingerprint 引き継ぎ・reconcile の復元 |
+| `test/workspace-tree.test.ts` | 木の走査，タブ順，ポップアウト (`floatingSplit`) の取り込み |
+| `test/obsidian-stub.ts` | `obsidian` の代役．`WorkspaceLeaf` は `instanceof` 判定のため実クラスで持つ |
+| `test/setup.ts` | Obsidian が生やす `Array.prototype.remove()` の補完 |
+
+`main.ts` の調整ロジックは `Plugin` クラスに密結合していて単体テストにできていない．
 
 設定 → コミュニティプラグイン → 再読み込み → Tab Bands を有効化．
 開発中は [pjeby/hot-reload](https://github.com/pjeby/hot-reload) を併用する
@@ -273,6 +286,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `src/store.ts` | バンドの状態と永続化 |
 | `src/workspace-tree.ts` | `children` を辿るリーフ列挙 (`iterate*Leaves` の代替)．ポップアウトも走査 |
 | `src/obsidian-internals.d.ts` | 非公式 API の型宣言 |
+| `test/` | 単体テスト (vitest)．`obsidian` はスタブに差し替える |
 
 ## 先行プラグイン
 

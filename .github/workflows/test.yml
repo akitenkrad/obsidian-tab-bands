@@ -1,0 +1,28 @@
+name: Test
+
+# main への push と，すべての Pull Request で型チェック・テスト・ビルドを通す．
+# リリース (release.yml) はタグ push が起点なので，こちらとは独立している．
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build (型チェックを含む)
+        run: npm run build
