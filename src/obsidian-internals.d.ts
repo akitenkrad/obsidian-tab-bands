@@ -26,12 +26,9 @@ declare module "obsidian" {
   }
 
   interface WorkspaceParent {
-    id: string;
     /** 子アイテムの並び順 = タブの並び順 */
     children: WorkspaceItem[];
     containerEl: HTMLElement;
-    /** WorkspaceTabs のみ．指定リーフをアクティブタブにする */
-    selectTab?(leaf: WorkspaceLeaf): void;
     /**
      * 子アイテムを index の位置に差し込む．
      * 引数の順序も containerEl を一緒に運ぶかも保証が無いので，

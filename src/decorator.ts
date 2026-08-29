@@ -56,16 +56,23 @@ export class TabStripDecorator {
       // チップはタブヘッダの子なので，ストリップからの子孫検索で拾える
       const strip = leaves[0]?.tabHeaderEl?.parentElement;
       strip?.querySelectorAll(`.${CHIP_CLASS}`).forEach((el) => el.remove());
-      for (const leaf of leaves) this.resetTab(leaf.tabHeaderEl);
+      for (const leaf of leaves) this.resetTab(leaf);
     }
   }
 
-  private resetTab(el: HTMLElement | undefined): void {
+  /**
+   * タイトル要素は leaf.tabHeaderInnerTitleEl から取る．
+   * renderRun() と同じ経路にすることで，CSS クラス名 (.workspace-tab-header-inner-title)
+   * への依存を 1 つ減らしている．非公式 API が消えれば型エラーで気付けるが，
+   * クラス名が変わった場合は型チェックを通ったまま無言で壊れるため．
+   */
+  private resetTab(leaf: WorkspaceLeaf): void {
+    const el = leaf.tabHeaderEl;
     if (!el) return;
     el.removeClasses(["tb-member", "tb-first", "tb-last", "tb-collapsed", "tb-chip-host"]);
     el.removeEventListener("click", this.collapsedHostClick, true);
     delete el.dataset.tbToggle;
-    const title = el.querySelector<HTMLElement>(".workspace-tab-header-inner-title");
+    const title = leaf.tabHeaderInnerTitleEl;
     if (title?.dataset.tbOriginal !== undefined) {
       title.textContent = title.dataset.tbOriginal;
       delete title.dataset.tbOriginal;
@@ -80,7 +87,7 @@ export class TabStripDecorator {
       if (!strip) continue;
 
       strip.querySelectorAll(`.${CHIP_CLASS}`).forEach((el) => el.remove());
-      for (const leaf of leaves) this.resetTab(leaf.tabHeaderEl);
+      for (const leaf of leaves) this.resetTab(leaf);
 
       // 連続する同一グループのリーフを 1 つの「ラン」として描画する
       let i = 0;
