@@ -5,6 +5,10 @@
  * 予告なく消える可能性がある．
  *
  * 網羅的な型定義が欲しい場合は fevol/obsidian-typings の導入を検討する．
+ *
+ * 逆に，一見それらしくても公開されているものはここに書かない．
+ * 例: Workspace.requestSaveLayout は 0.16.0 から公開 API (Debouncer).
+ *     WorkspaceLeaf.parent も公開．再宣言すると公開の型を隠してしまう．
  */
 import "obsidian";
 
@@ -36,10 +40,5 @@ declare module "obsidian" {
     insertChild?(index: number, item: WorkspaceItem, resize?: boolean): void;
     /** 子アイテムを外す．insertChild と対で使う */
     removeChild?(item: WorkspaceItem): void;
-  }
-
-  interface Workspace {
-    /** レイアウト (workspace.json) の保存を予約する */
-    requestSaveLayout(): void;
   }
 }

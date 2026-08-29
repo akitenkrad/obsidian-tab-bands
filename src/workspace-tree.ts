@@ -7,8 +7,8 @@ import { App, WorkspaceLeaf, WorkspaceParent } from "obsidian";
  * Obsidian 1.7 の遅延読み込み (deferred leaf) 導入以降，
  * workspace.iterateRootLeaves() / iterateAllLeaves() は **実体化済みのリーフしか
  * 列挙しない**．実測では木に 15 リーフある状態で 2 しか返らなかった．
- * 一方 WorkspaceParent.children には deferred なリーフも並んでおり，
- * それらも tabHeaderEl を持っている．よって children を唯一の列挙元とする．
+ * 一方 WorkspaceParent.children には deferred なリーフも並んでいるので，
+ * children を唯一の列挙元とする．
  */
 export function tabGroups(app: App): Map<WorkspaceParent, WorkspaceLeaf[]> {
   const result = new Map<WorkspaceParent, WorkspaceLeaf[]>();
@@ -31,10 +31,12 @@ export function tabGroups(app: App): Map<WorkspaceParent, WorkspaceLeaf[]> {
   return result;
 }
 
-/** children を持たず tabHeaderEl を持つものをリーフと見なす */
+/**
+ * リーフかどうかの判定．WorkspaceLeaf は公開クラスなので instanceof で足りる．
+ * (以前は tabHeaderEl の有無で見ていたが，非公式 API を型判別子に使う必要はない)
+ */
 function isLeaf(item: unknown): boolean {
-  const node = item as { children?: unknown; tabHeaderEl?: unknown };
-  return !Array.isArray(node?.children) && !!node?.tabHeaderEl;
+  return item instanceof WorkspaceLeaf;
 }
 
 /** ルート配下の全リーフをタブ順に平坦化して返す */

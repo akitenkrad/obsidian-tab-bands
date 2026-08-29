@@ -136,7 +136,13 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `WorkspaceLeaf.tabHeaderInnerTitleEl` | 折りたたみ時のタイトル書き換え | 畳んでも名前が出ない |
 | `WorkspaceParent.children` | リーフ列挙とタブの並び順 | 全機能が停止する |
 | `WorkspaceParent.insertChild` / `removeChild` | ペイン移動でのリーフ付け替え | 公開 API による再作成へ自動で落ちる (`leafId` が変わる) |
-| `Workspace.requestSaveLayout()` | 並び替えの保存 | 並びが保存されない |
+
+`Workspace.requestSaveLayout()` も使っているが，こちらは 0.16.0 から**公開 API**
+(`Debouncer`) なので上表には含めない．`WorkspaceLeaf.parent` も同様に公開．
+
+`WorkspaceLeaf.id` には公開の対応物がある: `Workspace.getLeafById()` (1.5.1〜) と
+`Workspace.getLayout()` を組み合わせれば id とリーフの対応表は公開 API だけで作れる．
+リーフ ID という概念自体が公開 API に露出しているぶん，この依存は比較的壊れにくい．
 
 網羅的な型が必要になったら [fevol/obsidian-typings](https://github.com/Fevol/obsidian-typings) を導入する．
 
