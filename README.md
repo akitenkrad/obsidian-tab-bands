@@ -3,9 +3,50 @@
 Obsidian のタブストリップに，名前つき・色つき・折りたためる「バンド」を重ねるプラグイン．
 関連するタブをまとめ，使わないバンドは畳んでタブ列の幅を取り戻せる．
 
-## セットアップ
+> [!WARNING]
+> **本プラグインは Obsidian の非公式 API に依存している．**
+> 公開 d.ts に無いプロパティ (`WorkspaceLeaf.id`, `WorkspaceParent.children` など) を
+> 使っているため，Obsidian 本体の更新で予告なく動作しなくなる可能性がある．
+> 依存の一覧は [非公式 API への依存](#非公式-api-への依存) を参照．
+>
+> - **壊れたときの症状**: タブの装飾 (色・チップ) が出ない，再起動でバンドが消える，
+>   折りたたんでもバンド名が出ない，あるいは全機能が停止する．
+> - **ノート本体には影響しない．** バンドの情報はプラグインフォルダの `data.json` に
+>   だけ持ち，vault 内のノートは読み書きしない．折りたたみは CSS のみで leaf を
+>   detach しないので，未保存の編集も失われない．異常時はプラグインを無効化すれば
+>   タブストリップは通常の状態に戻る．
+
+## インストール
+
+コミュニティプラグイン一覧には未登録のため，手動で導入する．
+
+### Release から入れる (利用者向け)
+
+1. [Releases](https://github.com/akitenkrad/obsidian-tab-bands/releases) の最新版から
+   `main.js` / `manifest.json` / `styles.css` の 3 ファイルをダウンロードする．
+2. vault に `.obsidian/plugins/tab-bands/` を作り，3 ファイルをそのまま置く．
+
+   ```
+   <vault>/.obsidian/plugins/tab-bands/
+   ├── main.js
+   ├── manifest.json
+   └── styles.css
+   ```
+
+   ディレクトリ名は `manifest.json` の `id` (`tab-bands`) と一致している必要がある．
+3. 設定 → コミュニティプラグイン → (制限モードなら解除) → 再読み込み →
+   Tab Bands を有効化．
+
+デスクトップ専用 (`isDesktopOnly: true`)．Obsidian 1.7.0 以降が必要．
+
+更新するときは同じ 3 ファイルを上書きして Obsidian を再読み込みする．
+バンドの状態は同じフォルダの `data.json` に入っているので消さないこと．
+
+### ソースからビルドする (開発者向け)
 
 ```bash
+git clone https://github.com/akitenkrad/obsidian-tab-bands.git \
+  <vault>/.obsidian/plugins/tab-bands
 cd <vault>/.obsidian/plugins/tab-bands
 npm install
 npm run build    # 型チェック + production ビルド
@@ -15,8 +56,6 @@ npm run dev      # watch ビルド (開発時)
 設定 → コミュニティプラグイン → 再読み込み → Tab Bands を有効化．
 開発中は [pjeby/hot-reload](https://github.com/pjeby/hot-reload) を併用する
 (プラグインフォルダに空の `.hotreload` を置く).
-
-ディレクトリ名は `manifest.json` の `id` (`tab-bands`) と一致している必要がある．
 
 ## 使い方
 
@@ -96,6 +135,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `WorkspaceLeaf.tabHeaderEl` | 装飾対象の DOM | 装飾が出ない |
 | `WorkspaceLeaf.tabHeaderInnerTitleEl` | 折りたたみ時のタイトル書き換え | 畳んでも名前が出ない |
 | `WorkspaceParent.children` | リーフ列挙とタブの並び順 | 全機能が停止する |
+| `WorkspaceParent.insertChild` / `removeChild` | ペイン移動でのリーフ付け替え | 公開 API による再作成へ自動で落ちる (`leafId` が変わる) |
 | `Workspace.requestSaveLayout()` | 並び替えの保存 | 並びが保存されない |
 
 網羅的な型が必要になったら [fevol/obsidian-typings](https://github.com/Fevol/obsidian-typings) を導入する．
