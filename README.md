@@ -112,7 +112,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | チップへのドロップ | `dragover` で `preventDefault()` を返せば `drop` を直接受け取れる |
 | タブヘッダ以外へのドロップ | 本体はタブを移動させる (ストリップ内の子の並びから index を計算している) |
 | ストリップの再構築 | タブ並べ替え時に本体が作り直し，注入した独自要素は捨てられる |
-| **`iterateRootLeaves()` / `iterateAllLeaves()`** | **deferred なリーフを列挙しない．** 木に 15 リーフある状態で 2 しか返らなかった |
+| **`iterateRootLeaves()` / `iterateAllLeaves()`** | **deferred なリーフを列挙しない．** 2026-08-29 / 1.10.3 で再測定: 12 リーフ (うち deferred 10) に対し 2 しか返らない |
 | `WorkspaceParent.children` | deferred なリーフも並ぶ．`tabHeaderEl` も持っている |
 | ペイン間のタブ移動 | 本体は leaf を reparent する．`leaf.id` は保持される |
 | `MenuItem.setSubmenu()` | このバージョンには存在しない．フラットなメニューにする必要がある |
@@ -121,6 +121,10 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 このうち `iterate*Leaves()` の件が最も影響が大きい．Obsidian 1.7 の遅延読み込み
 導入以降，これらの API はリーフの列挙に使えない．本プラグインは
 `src/workspace-tree.ts` で `children` を再帰的に辿る実装に置き換えている．
+
+**この挙動は 1.10.3 でも変わっていない** (2026-08-29 再測定)．返る件数は
+非 deferred なリーフの数と完全に一致した (12 - 10 = 2)．`WorkspaceParent.children`
+への依存は，公開 API 側が deferred を扱うようになるまで外せない．
 
 タブヘッダの幅の件から，折りたたみ時にバンド名をチップ内に表示するのは断念し，
 **タブのタイトル要素そのものを `バンド名 (N)` で上書きする**方式を採っている

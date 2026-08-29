@@ -6,9 +6,14 @@ import { App, WorkspaceLeaf, WorkspaceParent } from "obsidian";
  * 【なぜ iterate*Leaves() を使わないか】
  * Obsidian 1.7 の遅延読み込み (deferred leaf) 導入以降，
  * workspace.iterateRootLeaves() / iterateAllLeaves() は **実体化済みのリーフしか
- * 列挙しない**．実測では木に 15 リーフある状態で 2 しか返らなかった．
- * 一方 WorkspaceParent.children には deferred なリーフも並んでいるので，
+ * 列挙しない**．一方 WorkspaceParent.children には deferred なリーフも並んでいるので，
  * children を唯一の列挙元とする．
+ *
+ * 【再測定 2026-08-29 / Obsidian 1.10.3】依然として真．
+ *   iterateRootLeaves: 2, children: 12, deferred: 10
+ * 返った 2 件は非 deferred なリーフの数 (12 - 10) と完全に一致した．
+ * 公開 API に寄せられるのは «順序も deferred も要らない» 場面だけだが，
+ * 本プラグインにそういう場面は無い (初回測定は 1.7 系で 15 中 2)．
  */
 export function tabGroups(app: App): Map<WorkspaceParent, WorkspaceLeaf[]> {
   const result = new Map<WorkspaceParent, WorkspaceLeaf[]>();
