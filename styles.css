@@ -1,10 +1,19 @@
 /* =========================================================================
-   チップはグループ先頭メンバーの .workspace-tab-header の内側に入る．
+   チップはグループ先頭メンバーのタブヘッダの内側に入る．
    ストリップの子要素数を変えないことで，Obsidian 本体のドロップ位置計算に
    干渉しないようにしている (実測でストリップ直下への挿入は index に影響する).
+
+   【.tb-xxx.tb-xxx と二重に書いてあるのは誤記ではない】
+   以前は .workspace-tab-header.tb-member のように本体のクラス名で詳細度を
+   稼いでいたが，本体がクラス名を変えると装飾が丸ごと消える (型チェックにも
+   CI にもかからない)．対象要素の特定は自前クラスだけで足りるので
+   (decorator.ts はこれらをタブヘッダにしか付けない)，自前クラスを二重に
+   書いて詳細度だけを維持している．
+   単独の .tb-member (0,1,0) にすると本体の .workspace-tab-header (0,1,0) と
+   並び，適用順だけで決まる状態になる (後から当たるテーマに負ける).
    ========================================================================= */
 
-.workspace-tab-header.tb-chip-host {
+.tb-chip-host.tb-chip-host {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -72,12 +81,12 @@
 }
 
 /* ---- グループに属するタブ ---- */
-.workspace-tab-header.tb-member {
+.tb-member.tb-member {
   position: relative;
   background-color: color-mix(in srgb, var(--tb-color) 9%, transparent);
 }
 
-.workspace-tab-header.tb-member::after {
+.tb-member.tb-member::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
@@ -85,12 +94,12 @@
   background-color: var(--tb-color);
 }
 
-.workspace-tab-header.tb-first::after {
+.tb-first.tb-first::after {
   border-start-start-radius: 2px;
   left: 3px;
 }
 
-.workspace-tab-header.tb-last::after {
+.tb-last.tb-last::after {
   border-start-end-radius: 2px;
   right: 3px;
 }
@@ -98,7 +107,7 @@
 /* ---- 折りたたみ ----
    チップはホストのタブヘッダの内側にいるので，ホストごと display:none に
    すると自分自身が消える．ホストは残してタイトル部分だけを畳む． */
-.workspace-tab-header.tb-collapsed:not(.tb-chip-host) {
+.tb-collapsed.tb-collapsed:not(.tb-chip-host) {
   display: none;
 }
 
@@ -106,7 +115,7 @@
 
 
 
-.workspace-tab-header.tb-chip-host.tb-collapsed::after {
+.tb-chip-host.tb-chip-host.tb-collapsed::after {
   content: none;
 }
 
@@ -120,11 +129,11 @@
 
 /* 折りたたみ時: チップは色ドットのみ．バンド名はタブのタイトルに出す
    (幅の計算を本体に任せ，CSS で幅を操作しない) */
-.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip-name,
-.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip-count {
+.tb-chip-host.tb-chip-host.tb-collapsed .tb-chip-name,
+.tb-chip-host.tb-chip-host.tb-collapsed .tb-chip-count {
   display: none;
 }
 
-.workspace-tab-header.tb-chip-host.tb-collapsed .tb-chip {
+.tb-chip-host.tb-chip-host.tb-collapsed .tb-chip {
   padding: 2px 4px;
 }

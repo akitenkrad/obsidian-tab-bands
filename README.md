@@ -168,9 +168,13 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 
 | 依存 | 箇所 | 壊れたときの症状 |
 | --- | --- | --- |
-| CSS クラス `.workspace-tab-header` | **`styles.css` の全セレクタ**，`main.ts` (`verifyOrder` の診断のみ) | 装飾が一切出ない (診断は静かに no-op になるだけ) |
+| CSS クラス `.workspace-tab-header` | `main.ts` の `verifyOrder()` (診断のみ) | 診断が静かに no-op になる．機能と装飾には影響しない |
 | タブヘッダが HTML5 `draggable` で，`dragstart` の target がタブヘッダ自身 | `drag.ts` 全体の前提 | ドラッグ操作を検出できない |
 | 本体がストリップを再構築する / ドロップ位置を子要素の並びから計算する | 「設計方針」節の前提そのもの | チップが消える，ドロップ位置がずれる |
+
+`styles.css` は以前この表の筆頭だったが，本体のクラス名で詳細度を稼ぐのをやめ，
+自前クラスの二重指定 (`.tb-member.tb-member`) に置き換えて依存を外した．
+詳細度は変えていないので見た目は同じ．
 
 クラス名への依存は 2 つ落とした: タイトル要素の `querySelector`
 (`.workspace-tab-header-inner-title`) は `tabHeaderInnerTitleEl` に寄せ，
