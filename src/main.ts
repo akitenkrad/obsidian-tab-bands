@@ -11,6 +11,7 @@ import {
 import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
 import { groupLabel, GroupStore, TabGroup } from "./store";
+import { absorptions, bandToJoinAtDrop, escapeTarget, type TabSlot } from "./rules";
 import { allTabLeaves, leafById, tabGroups } from "./workspace-tree";
 
 export default class TabBandsPlugin extends Plugin {
@@ -250,32 +251,31 @@ export default class TabBandsPlugin extends Plugin {
     const seen = new Set<string>();
 
     for (const [, leaves] of tabGroups(this.app)) {
-      for (let i = 0; i < leaves.length; i += 1) {
-        seen.add(leaves[i].id);
-        if (i === 0) continue;
-        if (this.knownLeafIds.has(leaves[i].id)) continue; // 既存タブの移動は対象外
-        if (this.store.groupOf(leaves[i].id)) continue;
+      for (const leaf of leaves) seen.add(leaf.id);
 
-        const prev = this.store.groupOf(leaves[i - 1].id);
-        if (!prev) continue;
-        const next = i + 1 < leaves.length ? this.store.groupOf(leaves[i + 1].id) : undefined;
-
-        // (a) メンバーに挟まれた位置に開かれた
-        const sandwiched = next?.id === prev.id;
-        // (b) バンド末尾のメンバーから開かれた．位置だけでは「バンドの右外に
-        //     手で開いた無関係なタブ」と区別できないので，左隣が直前まで
-        //     アクティブだったことを条件にする．
-        const openedFromMember = this.wasRecentlyActive(leaves[i - 1].id);
-
-        if (sandwiched || openedFromMember) {
-          this.store.assign(leaves[i], prev.id);
-          changed = true;
-        }
+      // 判断は rules.ts (純関数)．ここは結果を store に反映するだけ
+      const decided = absorptions(this.slotsOf(leaves), {
+        isNew: (leafId) => !this.knownLeafIds.has(leafId),
+        wasRecentlyActive: (leafId) => this.wasRecentlyActive(leafId),
+      });
+      for (const { leafId, groupId } of decided) {
+        const leaf = leaves.find((l) => l.id === leafId);
+        if (!leaf) continue;
+        this.store.assign(leaf, groupId);
+        changed = true;
       }
     }
 
     this.knownLeafIds = seen;
     return changed;
+  }
+
+  /** タブの並びを rules.ts が扱える形 (バンド所属と折りたたみだけ) に落とす */
+  private slotsOf(leaves: readonly WorkspaceLeaf[]): TabSlot[] {
+    return leaves.map((leaf) => {
+      const group = this.store.groupOf(leaf.id);
+      return { leafId: leaf.id, groupId: group?.id, collapsed: group?.collapsed };
+    });
   }
 
   /**
@@ -369,22 +369,14 @@ export default class TabBandsPlugin extends Plugin {
     if (this.pending) return false;
 
     const children = parent.children as WorkspaceLeaf[];
-    const index = children.indexOf(leaf);
-    if (index <= 0 || index >= children.length - 1) return false; // 両隣が要る
-
-    const left = this.store.groupOf(children[index - 1].id);
-    const right = this.store.groupOf(children[index + 1].id);
-    if (!left || left.id !== right?.id) return false; // バンドの外 / 境界
-    if (left.id === this.store.groupOf(leaf.id)?.id) return false; // 同じバンド内の並べ替え
-    // 畳んだバンドに入れるとそのタブがその場で消えて見える．
-    // 畳んだバンドへ入れる導線はチップへのドロップに任せる．
-    if (left.collapsed) return false;
+    const groupId = bandToJoinAtDrop(this.slotsOf(children), leaf.id);
+    if (!groupId) return false;
 
     const from = this.store.groupOf(leaf.id);
-    this.store.assign(leaf, left.id);
+    this.store.assign(leaf, groupId);
     // 元のバンドが分断されていたら整合させる (空になって消えた場合は何もしない)
     if (from && this.store.byId(from.id)) this.gatherGroup(parent, from.id);
-    this.gatherGroup(parent, left.id);
+    this.gatherGroup(parent, groupId);
     void this.persist();
     return true;
   }
@@ -643,11 +635,8 @@ export default class TabBandsPlugin extends Plugin {
     if (!active || this.store.groupOf(active.id)?.id !== group.id) return;
 
     const siblings = (active.parent?.children ?? []) as WorkspaceLeaf[];
-    const escape = siblings.find((leaf) => {
-      if (leaf === active) return false;
-      const g = this.store.groupOf(leaf.id);
-      return g?.id !== group.id && !g?.collapsed;
-    });
+    const escapeId = escapeTarget(this.slotsOf(siblings), active.id, group.id);
+    const escape = escapeId ? siblings.find((leaf) => leaf.id === escapeId) : undefined;
     if (!escape) {
       // ペイン内が畳んだバンドだけになる場合．畳むこと自体は許し，アクティブは
       // 中に留める (エディタは直前のノートを表示し続ける)．代わりに，戻って

@@ -60,12 +60,14 @@ npm test         # 単体テスト (vitest)
 
 | ファイル | 対象 |
 | --- | --- |
+| `test/rules.test.ts` | 新規タブの吸収，ドロップでの参加，折りたたみ時の逃げ先．**誤吸収しないこと**を厚めに |
 | `test/store.test.ts` | 採番・色の割り当て・assign/unassign・remap の fingerprint 引き継ぎ・reconcile の復元 |
 | `test/workspace-tree.test.ts` | 木の走査，タブ順，ポップアウト (`floatingSplit`) の取り込み |
 | `test/obsidian-stub.ts` | `obsidian` の代役．`WorkspaceLeaf` は `instanceof` 判定のため実クラスで持つ |
 | `test/setup.ts` | Obsidian が生やす `Array.prototype.remove()` の補完 |
 
-`main.ts` の調整ロジックは `Plugin` クラスに密結合していて単体テストにできていない．
+`main.ts` に残っているのは DOM 操作と Obsidian API の呼び出しで，
+membership の**判断**は `src/rules.ts` に純関数として切り出してある．
 
 設定 → コミュニティプラグイン → 再読み込み → Tab Bands を有効化．
 開発中は [pjeby/hot-reload](https://github.com/pjeby/hot-reload) を併用する
@@ -135,6 +137,10 @@ npm test         # 単体テスト (vitest)
   別ウィンドウのストリップを掴めない)．ドラッグ監視だけは document 単位なので，
   `window-open` で張り足している．**バンドのペイン移動先に別ウィンドウは出さない**
   (付け替えが document をまたげるか未検証のため).
+- **判断と適用を分ける．** «どのタブをどのバンドに入れるか» の判断は `src/rules.ts`
+  の純関数に集め，DOM 操作と store への反映は `main.ts` に残す．これまでのバグは
+  すべてこの判断に集中していたので，Obsidian を起動せずに «誤吸収しない» ことを
+  検査できる形にしてある．
 - **membership は明示操作でのみ変える．** 例外は「バンド内に新しく開かれたタブ」
   だけで，これも新出リーフに限定している (後述).
 
@@ -283,6 +289,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `src/main.ts` | プラグイン本体．コマンド，メニュー，イベント配線，ペイン移動 |
 | `src/decorator.ts` | タブストリップの装飾．チップの生成と配置，折りたたみ表示 |
 | `src/drag.ts` | ドラッグの監視．チップへのドロップ検出，ドラッグ結果の通知 |
+| `src/rules.ts` | membership の判断 (純関数．Obsidian にも DOM にも触らない) |
 | `src/store.ts` | バンドの状態と永続化 |
 | `src/workspace-tree.ts` | `children` を辿るリーフ列挙 (`iterate*Leaves` の代替)．ポップアウトも走査 |
 | `src/obsidian-internals.d.ts` | 非公式 API の型宣言 |
