@@ -628,7 +628,7 @@ export default class TabBandsPlugin extends Plugin {
    *
    * 逃げ先は「同じペインにいて，畳まれておらず，これから畳むバンドにも
    * 属さない」タブ．見つからなければ何もしない (アクティブは畳んだバンドの
-   * 中に留まる — MYTASK-2889 で挙動を決める).
+   * 中に留まり，エディタは直前のノートを表示し続ける).
    */
   private evacuateActive(group: TabGroup): void {
     const active = this.app.workspace.getMostRecentLeaf();
@@ -826,7 +826,8 @@ export default class TabBandsPlugin extends Plugin {
     if (this.reportedFailures.has("順序の不整合")) return;
     this.reportedFailures.add("順序の不整合");
     console.error(
-      "[tab-bands] children と DOM の並びが一致しません．この情報を MYTASK-2898 に添付してください．",
+      "[tab-bands] children と DOM の並びが一致しません．再現手順とこの出力を " +
+        "https://github.com/akitenkrad/obsidian-tab-bands/issues に報告してください．",
       { logical, visual },
     );
   }
