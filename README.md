@@ -160,12 +160,15 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 
 | 依存 | 箇所 | 壊れたときの症状 |
 | --- | --- | --- |
-| CSS クラス `.workspace-tab-header` | `main.ts` (`hasClass`)，`drag.ts` (`closest`)，**`styles.css` の全セレクタ** | 装飾が一切出ない．ドラッグでのバンド参加も効かない |
+| CSS クラス `.workspace-tab-header` | **`styles.css` の全セレクタ**，`main.ts` (`verifyOrder` の診断のみ) | 装飾が一切出ない (診断は静かに no-op になるだけ) |
 | タブヘッダが HTML5 `draggable` で，`dragstart` の target がタブヘッダ自身 | `drag.ts` 全体の前提 | ドラッグ操作を検出できない |
 | 本体がストリップを再構築する / ドロップ位置を子要素の並びから計算する | 「設計方針」節の前提そのもの | チップが消える，ドロップ位置がずれる |
 
-タイトル要素は以前 `.workspace-tab-header-inner-title` を `querySelector` でも引いていたが，
-`tabHeaderInnerTitleEl` に寄せてこの依存は落とした (壊れ方を 1 通りにするため)．
+クラス名への依存は 2 つ落とした: タイトル要素の `querySelector`
+(`.workspace-tab-header-inner-title`) は `tabHeaderInnerTitleEl` に寄せ，
+ドラッグ元の特定 (`drag.ts`) は `closest()` をやめて既知の `tabHeaderEl` が
+イベントの target を含むかで判定している．`main.ts` の `verifyOrder()` に残る
+`hasClass` は意図的なもので，理由はその関数のコメントに書いてある．
 
 `app.dragManager` はタブのドラッグに関与しないことを実測済みで，**使っていない**．
 `drag.ts` のコメントに記録が残っているだけなので，依存として数えない．

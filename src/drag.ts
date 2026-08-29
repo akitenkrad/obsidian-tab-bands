@@ -27,7 +27,7 @@ export interface DragBridgeCallbacks {
  *
  * 【実測に基づく前提】
  *  - タブは HTML5 drag (tabHeaderEl が draggable). dragstart の target は
- *    .workspace-tab-header そのものなので，掴んだリーフはここから特定できる.
+ *    タブヘッダかその子孫なので，掴んだリーフはここから特定できる.
  *  - app.dragManager はタブのドラッグに関与しない (draggable は常に null).
  *  - チップ上で dragover に preventDefault を返せば drop を直接受け取れる.
  *
@@ -86,11 +86,18 @@ export class TabDragBridge {
     }, true);
   }
 
+  /**
+   * dragstart の target から，掴まれたリーフを引く．
+   *
+   * 既知の tabHeaderEl が el を含むかで判定する (Node.contains は自分自身も true)．
+   * かつては closest(".workspace-tab-header") で祖先を辿ってから同一性で照合して
+   * いたが，それだと本体の CSS クラス名に依存する．クラス名が変わっても型チェックは
+   * 通ってしまい，ドラッグが無言で効かなくなるため，クラス名を知らずに済む形にした．
+   */
   private leafFromTabHeader(el: HTMLElement | null): WorkspaceLeaf | null {
-    const header = el?.closest<HTMLElement>(".workspace-tab-header");
-    if (!header) return null;
+    if (!el) return null;
     for (const [, leaves] of tabGroups(this.app)) {
-      const hit = leaves.find((leaf) => leaf.tabHeaderEl === header);
+      const hit = leaves.find((leaf) => leaf.tabHeaderEl?.contains(el));
       if (hit) return hit;
     }
     return null;

@@ -778,6 +778,11 @@ export default class TabBandsPlugin extends Plugin {
    * ランの判定は children から行い，チップの描画は DOM に対して行うため，
    * ここが食い違うと「同じバンドのチップが 2 箇所に出る」等の症状になる．
    * 不整合はプラグイン単体では原因を特定できないので，検出できたら記録する．
+   *
+   * ここだけは本体の CSS クラス名を**意図的に**使っている．既知の tabHeaderEl の
+   * 集合で filter すると，children に無いタブヘッダが DOM にある場合を弾いてしまい，
+   * まさに検出したい不整合が見えなくなるため (現在は "?" として記録される)．
+   * 診断専用なので，クラス名が変わっても静かに何もしなくなるだけで機能は壊れない．
    */
   private verifyOrder(parent: WorkspaceParent, strip: HTMLElement): void {
     const logical = (parent.children as WorkspaceLeaf[]).map((leaf) => leaf.id);
