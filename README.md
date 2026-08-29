@@ -5,8 +5,9 @@ Obsidian のタブストリップに，名前つき・色つき・折りたた�
 
 > [!WARNING]
 > **本プラグインは Obsidian の非公式 API に依存している．**
-> 公開 d.ts に無いプロパティ (`WorkspaceLeaf.id`, `WorkspaceParent.children` など) を
-> 使っているため，Obsidian 本体の更新で予告なく動作しなくなる可能性がある．
+> 公開 d.ts に無いプロパティ (`WorkspaceLeaf.id`, `WorkspaceParent.children` など) と，
+> 本体の DOM 構造 (CSS クラス `.workspace-tab-header`，タブヘッダのドラッグ機構) の
+> 両方を前提にしているため，Obsidian 本体の更新で予告なく動作しなくなる可能性がある．
 > 依存の一覧は [非公式 API への依存](#非公式-api-への依存) を参照．
 >
 > - **壊れたときの症状**: タブの装飾 (色・チップ) が出ない，再起動でバンドが消える，
@@ -127,6 +128,12 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 
 ## 非公式 API への依存
 
+依存は 2 種類ある．**型宣言しているもの**は Obsidian 側から消えれば型エラーになるので
+ビルド時に気付ける．**型に現れないもの**は，壊れても型チェックを通ってしまい，
+画面を見るまで分からない．後者の方が厄介なので，どちらも書いておく．
+
+### 型宣言しているもの
+
 `src/obsidian-internals.d.ts` に集約している．いずれも公開 d.ts にない．
 
 | プロパティ | 用途 | 壊れたときの症状 |
@@ -134,6 +141,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `WorkspaceLeaf.id` | 永続化キー | 再起動でバンドが消える |
 | `WorkspaceLeaf.tabHeaderEl` | 装飾対象の DOM | 装飾が出ない |
 | `WorkspaceLeaf.tabHeaderInnerTitleEl` | 折りたたみ時のタイトル書き換え | 畳んでも名前が出ない |
+| `WorkspaceLeaf.containerEl` / `WorkspaceParent.containerEl` | ペイン移動の着地判定 (`hasLanded`) | 付け替えが失敗と判定され，常に再作成へ落ちる |
 | `WorkspaceParent.children` | リーフ列挙とタブの並び順 | 全機能が停止する |
 | `WorkspaceParent.insertChild` / `removeChild` | ペイン移動でのリーフ付け替え | 公開 API による再作成へ自動で落ちる (`leafId` が変わる) |
 
@@ -145,6 +153,22 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 リーフ ID という概念自体が公開 API に露出しているぶん，この依存は比較的壊れにくい．
 
 網羅的な型が必要になったら [fevol/obsidian-typings](https://github.com/Fevol/obsidian-typings) を導入する．
+
+### 型に現れないもの
+
+型宣言に載らないので，Obsidian 側が変えても**ビルドは通ったまま無言で壊れる**．
+
+| 依存 | 箇所 | 壊れたときの症状 |
+| --- | --- | --- |
+| CSS クラス `.workspace-tab-header` | `main.ts` (`hasClass`)，`drag.ts` (`closest`)，**`styles.css` の全セレクタ** | 装飾が一切出ない．ドラッグでのバンド参加も効かない |
+| タブヘッダが HTML5 `draggable` で，`dragstart` の target がタブヘッダ自身 | `drag.ts` 全体の前提 | ドラッグ操作を検出できない |
+| 本体がストリップを再構築する / ドロップ位置を子要素の並びから計算する | 「設計方針」節の前提そのもの | チップが消える，ドロップ位置がずれる |
+
+タイトル要素は以前 `.workspace-tab-header-inner-title` を `querySelector` でも引いていたが，
+`tabHeaderInnerTitleEl` に寄せてこの依存は落とした (壊れ方を 1 通りにするため)．
+
+`app.dragManager` はタブのドラッグに関与しないことを実測済みで，**使っていない**．
+`drag.ts` のコメントに記録が残っているだけなので，依存として数えない．
 
 ## 実装メモ
 
