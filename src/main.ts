@@ -23,6 +23,11 @@ export default class TabBandsPlugin extends Plugin {
   /** 直前にアクティブだったリーフ ID (アクティブが「動いた」かの判定に使う) */
   private lastActiveLeafId: string | undefined;
   /**
+   * 1 つ前にアクティブだったリーフ．
+   * 「バンドのメンバーから開かれた新規タブ」の判定に使う (absorbNewNeighbors).
+   */
+  private previousActiveLeafId: string | undefined;
+  /**
    * 逃げ先が無いまま畳まれ，畳んだバンドの中に取り残されたタブ．
    * フォーカスが戻ってきただけでバンドを開き直さないために覚えておく．
    * セッション限りの状態でよい (起動時は onLayoutReady の退避で入り直す).
@@ -242,13 +247,22 @@ export default class TabBandsPlugin extends Plugin {
     for (const [, leaves] of tabGroups(this.app)) {
       for (let i = 0; i < leaves.length; i += 1) {
         seen.add(leaves[i].id);
-        if (i === 0 || i === leaves.length - 1) continue;
+        if (i === 0) continue;
         if (this.knownLeafIds.has(leaves[i].id)) continue; // 既存タブの移動は対象外
         if (this.store.groupOf(leaves[i].id)) continue;
 
         const prev = this.store.groupOf(leaves[i - 1].id);
-        const next = this.store.groupOf(leaves[i + 1].id);
-        if (prev && next && prev.id === next.id) {
+        if (!prev) continue;
+        const next = i + 1 < leaves.length ? this.store.groupOf(leaves[i + 1].id) : undefined;
+
+        // (a) メンバーに挟まれた位置に開かれた
+        const sandwiched = next?.id === prev.id;
+        // (b) バンド末尾のメンバーから開かれた．位置だけでは「バンドの右外に
+        //     手で開いた無関係なタブ」と区別できないので，左隣が直前まで
+        //     アクティブだったことを条件にする．
+        const openedFromMember = this.wasRecentlyActive(leaves[i - 1].id);
+
+        if (sandwiched || openedFromMember) {
           this.store.assign(leaves[i], prev.id);
           changed = true;
         }
@@ -257,6 +271,18 @@ export default class TabBandsPlugin extends Plugin {
 
     this.knownLeafIds = seen;
     return changed;
+  }
+
+  /**
+   * そのリーフが「今」または「1 つ前」のアクティブか．
+   *
+   * 新しいタブが開かれたとき，layout-change と active-leaf-change の
+   * どちらが先に来るかは保証されない．先に layout-change が来れば開き元は
+   * まだ lastActive，先に active-leaf-change が来れば previousActive に
+   * 落ちている．どちらでも拾えるように両方を見る．
+   */
+  private wasRecentlyActive(leafId: string): boolean {
+    return leafId === this.lastActiveLeafId || leafId === this.previousActiveLeafId;
   }
 
   // ---------- ペイン移動 ----------
@@ -555,6 +581,7 @@ export default class TabBandsPlugin extends Plugin {
   private onActiveLeafChange(): void {
     const active = this.app.workspace.getMostRecentLeaf();
     const moved = active?.id !== this.lastActiveLeafId;
+    if (moved) this.previousActiveLeafId = this.lastActiveLeafId;
     this.lastActiveLeafId = active?.id;
     // 展開すると persist() 経由で再描画されるので，重ねて refresh しない
     if (moved && this.revealActiveBand()) return;
