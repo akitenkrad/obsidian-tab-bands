@@ -18,9 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ロックファイルは npm 11 系で生成している．Node 20 (npm 10) だと
+      # optional な esbuild のプラットフォーム別パッケージの解釈が食い違い，
+      # npm ci が EBADPLATFORM で落ちる (2026-08-29 に実際に踏んだ).
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install dependencies
         run: npm ci
