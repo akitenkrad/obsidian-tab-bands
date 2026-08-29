@@ -27,6 +27,14 @@ declare module "obsidian" {
     parent: WorkspaceParent;
   }
 
+  interface Workspace {
+    /**
+     * ポップアウトウィンドウのルート．公開 d.ts には rootSplit しかない．
+     * 無い環境でも «ポップアウトが装飾されない» だけで済むよう optional にする．
+     */
+    floatingSplit?: WorkspaceParent;
+  }
+
   interface WorkspaceParent {
     /** 子アイテムの並び順 = タブの並び順 */
     children: WorkspaceItem[];

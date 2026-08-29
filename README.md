@@ -102,6 +102,12 @@ npm run dev      # watch ビルド (開発時)
   出る状態も正常系として扱う．
 - **折りたたみは CSS のみ．** leaf を detach しないので，エディタのスクロール位置や
   未保存の編集が保持される．先頭メンバーだけはチップの宿主として残す．
+- **ポップアウトも同じ経路で扱う．** `floatingSplit` を走査対象に足すだけで，
+  ストリップも MutationObserver も `leaf.tabHeaderEl.parentElement` から辿るので
+  ウィンドウをまたいでも成立する (`document.querySelector` を使っていたら
+  別ウィンドウのストリップを掴めない)．ドラッグ監視だけは document 単位なので，
+  `window-open` で張り足している．**バンドのペイン移動先に別ウィンドウは出さない**
+  (付け替えが document をまたげるか未検証のため).
 - **membership は明示操作でのみ変える．** 例外は「バンド内に新しく開かれたタブ」
   だけで，これも新出リーフに限定している (後述).
 
@@ -150,6 +156,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `WorkspaceLeaf.tabHeaderEl` | 装飾対象の DOM | 装飾が出ない |
 | `WorkspaceLeaf.tabHeaderInnerTitleEl` | 折りたたみ時のタイトル書き換え | 畳んでも名前が出ない |
 | `WorkspaceParent.containerEl` | ペイン移動の着地判定 (`hasLanded`) | 付け替えが失敗と判定され，常に再作成へ落ちる |
+| `Workspace.floatingSplit` | ポップアウトウィンドウの走査 | ポップアウトが装飾されない (optional 宣言なので他は動く) |
 | `WorkspaceParent.children` | リーフ列挙とタブの並び順 | 全機能が停止する |
 | `WorkspaceParent.insertChild` / `removeChild` | ペイン移動でのリーフ付け替え | 公開 API による再作成へ自動で落ちる (`leafId` が変わる) |
 
@@ -242,7 +249,6 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 - [ ] 展開状態のバンドのドラッグ移動 (「1 枚だけ動かす」操作と区別できない)
 - [ ] チップ自体のドラッグでバンドごと並び替え (親タブの `dragstart` と競合する)
 - [ ] チップへのドロップ位置がバンド先頭に固定される (Chrome は末尾に追加)
-- [ ] ポップアウトウィンドウ (`window-open`) のタブストリップへの追随
 - [ ] モバイル (`isDesktopOnly: true` を外す場合，`WorkspaceMobileDrawer` の分岐が必要)
 - [ ] 設定タブ (既定色，チップ幅，折りたたみ時の挙動)
 
@@ -254,7 +260,7 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `src/decorator.ts` | タブストリップの装飾．チップの生成と配置，折りたたみ表示 |
 | `src/drag.ts` | ドラッグの監視．チップへのドロップ検出，ドラッグ結果の通知 |
 | `src/store.ts` | バンドの状態と永続化 |
-| `src/workspace-tree.ts` | `children` を辿るリーフ列挙 (`iterate*Leaves` の代替) |
+| `src/workspace-tree.ts` | `children` を辿るリーフ列挙 (`iterate*Leaves` の代替)．ポップアウトも走査 |
 | `src/obsidian-internals.d.ts` | 非公式 API の型宣言 |
 
 ## 先行プラグイン

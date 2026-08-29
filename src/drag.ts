@@ -40,6 +40,8 @@ export class TabDragBridge {
   private candidate: WorkspaceLeaf | null = null;
   private originParent: WorkspaceParent | null = null;
   private hovered: HTMLElement | null = null;
+  /** 既にリスナを張った document (ポップアウトぶんを二重登録しない) */
+  private attachedDocs = new WeakSet<Document>();
 
   constructor(
     private plugin: Plugin,
@@ -50,7 +52,26 @@ export class TabDragBridge {
   }
 
   register(): void {
-    const doc = document;
+    this.attach(document);
+    // 前回セッションから復元されたポップアウトにも張る
+    this.app.workspace.onLayoutReady(() => {
+      for (const [parent] of tabGroups(this.app)) this.attach(parent.getContainer().doc);
+    });
+    this.plugin.registerEvent(
+      this.app.workspace.on("window-open", (_win, win) => this.attach(win.document)),
+    );
+  }
+
+  /**
+   * 1 つの document にドラッグ監視を張る．
+   *
+   * ポップアウトウィンドウは document 自体が別なので，メインウィンドウに
+   * 張っただけではタブのドラッグを検出できない．registerDomEvent なので
+   * プラグインの unload でまとめて外れる．
+   */
+  private attach(doc: Document): void {
+    if (this.attachedDocs.has(doc)) return;
+    this.attachedDocs.add(doc);
     const on = this.plugin.registerDomEvent.bind(this.plugin);
 
     on(doc, "dragstart", (evt: DragEvent) => {

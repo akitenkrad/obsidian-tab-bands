@@ -11,7 +11,7 @@ import {
 import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
 import { groupLabel, GroupStore, TabGroup } from "./store";
-import { allRootLeaves, leafById, tabGroups } from "./workspace-tree";
+import { allTabLeaves, leafById, tabGroups } from "./workspace-tree";
 
 export default class TabBandsPlugin extends Plugin {
   store!: GroupStore;
@@ -70,8 +70,8 @@ export default class TabBandsPlugin extends Plugin {
     this.bridge.register();
 
     this.app.workspace.onLayoutReady(() => {
-      this.knownLeafIds = new Set(this.rootLeaves().map((l) => l.id));
-      this.store.reconcile(this.rootLeaves());
+      this.knownLeafIds = new Set(this.tabLeaves().map((l) => l.id));
+      this.store.reconcile(this.tabLeaves());
       // 前回の終了時にアクティブだったタブが畳んだバンドの中にあることがある．
       // 起動時は「保存された折りたたみ状態」を尊重し，アクティブの方を逃がす．
       const active = this.app.workspace.getMostRecentLeaf();
@@ -84,6 +84,11 @@ export default class TabBandsPlugin extends Plugin {
 
     this.registerEvent(this.app.workspace.on("layout-change", () => this.onLayoutChange()));
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onActiveLeafChange()));
+
+    // ポップアウトの開閉．タブグループが増減するので装飾と MutationObserver を
+    // 張り直す (rerender が watch() ごとやり直す).
+    this.registerEvent(this.app.workspace.on("window-open", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("window-close", () => this.refresh()));
 
     // タブの右クリックメニュー (source === "tab-header") にバンド操作を足す
     this.registerEvent(
@@ -311,7 +316,7 @@ export default class TabBandsPlugin extends Plugin {
       return;
     }
 
-    const rest = this.rootLeaves().filter(
+    const rest = this.tabLeaves().filter(
       (l) => l !== host && this.store.groupOf(l.id)?.id === group.id,
     );
     if (!rest.length) {
@@ -517,12 +522,17 @@ export default class TabBandsPlugin extends Plugin {
 
   /** 移動先候補のペイン (バンドが今いるペインは除く) */
   private moveTargets(group: TabGroup): { label: string; parent: WorkspaceParent }[] {
-    const home = this.rootLeaves().find((l) => this.store.groupOf(l.id)?.id === group.id)?.parent;
+    const home = this.tabLeaves().find((l) => this.store.groupOf(l.id)?.id === group.id)?.parent;
+    // 別ウィンドウ (ポップアウト) のペインは候補に出さない．insertChild による
+    // 付け替えが document をまたげるかは未検証で，落ちれば作り直しになり
+    // leafId と未保存の編集を失う．getContainer() は公開 API．
+    const homeContainer = home?.getContainer();
     const out: { label: string; parent: WorkspaceParent }[] = [];
     let n = 0;
     for (const [parent, leaves] of tabGroups(this.app)) {
       n += 1;
       if (parent === home) continue;
+      if (homeContainer && parent.getContainer() !== homeContainer) continue;
       out.push({ label: `ペイン ${n} (${leaves[0]?.getDisplayText() ?? ""})`, parent });
     }
     return out;
@@ -535,7 +545,7 @@ export default class TabBandsPlugin extends Plugin {
    * leafId を返す．どちらでも store の並びを移動後の ID で貼り替える．
    */
   private async moveBandTo(group: TabGroup, target: WorkspaceParent): Promise<void> {
-    const members = this.rootLeaves().filter((l) => this.store.groupOf(l.id)?.id === group.id);
+    const members = this.tabLeaves().filter((l) => this.store.groupOf(l.id)?.id === group.id);
     if (!members.length) return;
 
     const previousIds = members.map((leaf) => leaf.id);
@@ -558,8 +568,9 @@ export default class TabBandsPlugin extends Plugin {
 
   // ---------- 操作 ----------
 
-  private rootLeaves(): WorkspaceLeaf[] {
-    return allRootLeaves(this.app);
+  /** タブストリップに並ぶ全リーフ (ポップアウトのぶんも含む) */
+  private tabLeaves(): WorkspaceLeaf[] {
+    return allTabLeaves(this.app);
   }
 
   // ---------- アクティブタブと折りたたみ ----------
@@ -685,7 +696,7 @@ export default class TabBandsPlugin extends Plugin {
 
   private async closeGroup(group: TabGroup): Promise<void> {
     const name = this.label(group);
-    const targets = this.rootLeaves().filter((l) => group.leafIds.includes(l.id));
+    const targets = this.tabLeaves().filter((l) => group.leafIds.includes(l.id));
     for (const leaf of targets) leaf.detach();
     this.store.deleteGroup(group.id);
     await this.persist();

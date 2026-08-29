@@ -2,6 +2,7 @@ import { App, WorkspaceLeaf, WorkspaceParent } from "obsidian";
 
 /**
  * ワークスペースの木を children で再帰的に辿り，タブグループ単位でリーフを集める．
+ * ルート (rootSplit) とポップアウトウィンドウ (floatingSplit) の両方を見る．
  *
  * 【なぜ iterate*Leaves() を使わないか】
  * Obsidian 1.7 の遅延読み込み (deferred leaf) 導入以降，
@@ -33,6 +34,10 @@ export function tabGroups(app: App): Map<WorkspaceParent, WorkspaceLeaf[]> {
   };
 
   walk(app.workspace.rootSplit);
+  // ポップアウトは別 document になるが，リーフの辿り方は同じ．
+  // ストリップは必ず leaf.tabHeaderEl.parentElement から引くこと
+  // (document.querySelector では別ウィンドウのストリップを掴めない).
+  walk(app.workspace.floatingSplit);
   return result;
 }
 
@@ -44,8 +49,8 @@ function isLeaf(item: unknown): boolean {
   return item instanceof WorkspaceLeaf;
 }
 
-/** ルート配下の全リーフをタブ順に平坦化して返す */
-export function allRootLeaves(app: App): WorkspaceLeaf[] {
+/** タブストリップに並ぶ全リーフをタブ順に平坦化して返す (ポップアウトも含む) */
+export function allTabLeaves(app: App): WorkspaceLeaf[] {
   const out: WorkspaceLeaf[] = [];
   for (const [, leaves] of tabGroups(app)) out.push(...leaves);
   return out;
@@ -53,5 +58,5 @@ export function allRootLeaves(app: App): WorkspaceLeaf[] {
 
 /** ID からリーフを引く (deferred なリーフも対象) */
 export function leafById(app: App, leafId: string): WorkspaceLeaf | undefined {
-  return allRootLeaves(app).find((leaf) => leaf.id === leafId);
+  return allTabLeaves(app).find((leaf) => leaf.id === leafId);
 }
