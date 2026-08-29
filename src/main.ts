@@ -441,15 +441,20 @@ export default class TabBandsPlugin extends Plugin {
    * 付け替えが実際に効いたかを確かめる．
    *
    * children だけでなく DOM も見る．insertChild がタブヘッダと
-   * リーフ本体の containerEl を一緒に運んでくれるかは保証が無く，
-   * 運ばれていなければ「論理的には移動したが画面に出ない」状態になるため．
+   * リーフ本体を一緒に運んでくれるかは保証が無く，運ばれていなければ
+   * 「論理的には移動したが画面に出ない」状態になるため．
+   *
+   * 内容側は leaf.view.containerEl (公開 API) で見る．leaf.containerEl は
+   * 非公式で，かつ view.containerEl はその子孫なので，target に入っているか
+   * どうかの判定としては等価．deferred なリーフでも view.containerEl は
+   * 存在する (2026-08-29, Obsidian 1.10.3 で実測: deferred 10 件すべてが保持).
    */
   private hasLanded(leaf: WorkspaceLeaf, target: WorkspaceParent): boolean {
     return (
       leaf.parent === target &&
       (target.children as WorkspaceLeaf[]).includes(leaf) &&
       target.containerEl.contains(leaf.tabHeaderEl) &&
-      target.containerEl.contains(leaf.containerEl)
+      target.containerEl.contains(leaf.view.containerEl)
     );
   }
 

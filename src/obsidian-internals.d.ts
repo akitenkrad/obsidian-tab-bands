@@ -20,8 +20,10 @@ declare module "obsidian" {
     tabHeaderEl: HTMLElement;
     /** タブヘッダ内のタイトル要素 */
     tabHeaderInnerTitleEl: HTMLElement;
-    /** リーフの内容コンテナ */
-    containerEl: HTMLElement;
+    /**
+     * 公開の型は WorkspaceTabs | WorkspaceMobileDrawer だが，children を辿るために
+     * WorkspaceParent へ広げている．プロパティ自体は公開 API．
+     */
     parent: WorkspaceParent;
   }
 

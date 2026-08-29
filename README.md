@@ -141,12 +141,16 @@ Obsidian の公開ドキュメントに無い挙動．いずれも実機 (macOS,
 | `WorkspaceLeaf.id` | 永続化キー | 再起動でバンドが消える |
 | `WorkspaceLeaf.tabHeaderEl` | 装飾対象の DOM | 装飾が出ない |
 | `WorkspaceLeaf.tabHeaderInnerTitleEl` | 折りたたみ時のタイトル書き換え | 畳んでも名前が出ない |
-| `WorkspaceLeaf.containerEl` / `WorkspaceParent.containerEl` | ペイン移動の着地判定 (`hasLanded`) | 付け替えが失敗と判定され，常に再作成へ落ちる |
+| `WorkspaceParent.containerEl` | ペイン移動の着地判定 (`hasLanded`) | 付け替えが失敗と判定され，常に再作成へ落ちる |
 | `WorkspaceParent.children` | リーフ列挙とタブの並び順 | 全機能が停止する |
 | `WorkspaceParent.insertChild` / `removeChild` | ペイン移動でのリーフ付け替え | 公開 API による再作成へ自動で落ちる (`leafId` が変わる) |
 
 `Workspace.requestSaveLayout()` も使っているが，こちらは 0.16.0 から**公開 API**
 (`Debouncer`) なので上表には含めない．`WorkspaceLeaf.parent` も同様に公開．
+
+リーフ側の内容コンテナは `leaf.view.containerEl` (公開 API) で見ている．
+`WorkspaceLeaf.containerEl` は非公式だが，`View.containerEl` がその子孫なので
+着地判定としては等価で，deferred なリーフでも失われない (実測済み)．
 
 `WorkspaceLeaf.id` には公開の対応物がある: `Workspace.getLeafById()` (1.5.1〜) と
 `Workspace.getLayout()` を組み合わせれば id とリーフの対応表は公開 API だけで作れる．
