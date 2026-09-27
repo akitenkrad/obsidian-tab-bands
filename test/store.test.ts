@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plugin, WorkspaceLeaf as ObsidianLeaf } from "obsidian";
-import { COLOR_ORDER, GroupStore, groupLabel, type GroupsData } from "../src/store";
+import { COLOR_ORDER, GroupStore, groupLabel, type GroupsData, MISS_LIMIT } from "../src/store";
 import { CHIP_NAME_WIDTH, DEFAULT_SETTINGS } from "../src/settings";
 import { moment, WorkspaceLeaf } from "./obsidian-stub";
 
@@ -198,7 +198,7 @@ describe("reconcile (起動時の照合)", () => {
     const g = store.createGroup();
     store.assign(leaf("L1", "a.md"), g.id);
 
-    store.reconcile([leaf("L1", "a.md")]);
+    store.reconcile([leaf("L1", "a.md")], { countMiss: true });
 
     expect(store.byId(g.id)?.leafIds).toEqual(["L1"]);
   });
@@ -208,20 +208,84 @@ describe("reconcile (起動時の照合)", () => {
     const g = store.createGroup();
     store.assign(leaf("old", "a.md"), g.id);
 
-    store.reconcile([leaf("fresh", "a.md")]);
+    store.reconcile([leaf("fresh", "a.md")], { countMiss: true });
 
     expect(store.byId(g.id)?.leafIds).toEqual(["fresh"]);
     expect(store.groupOf("fresh")?.id).toBe(g.id);
   });
 
-  it("復元できないメンバーは落とし，空になったバンドは消す", async () => {
+  it("countMiss:true の reconcile を MISS_LIMIT 回繰り返すと落ち，バンドも消える", async () => {
     const { store } = await newStore();
     const g = store.createGroup();
     store.assign(leaf("gone", "deleted.md"), g.id);
 
-    store.reconcile([leaf("other", "b.md")]);
-
+    for (let i = 0; i < MISS_LIMIT; i += 1) {
+      store.reconcile([leaf("other", "b.md")], { countMiss: true });
+      if (i < MISS_LIMIT - 1) {
+        expect(store.byId(g.id)).toBeDefined();
+      }
+    }
     expect(store.groups).toHaveLength(0);
+  });
+
+  it("countMiss:false では何も落ちず misses も増えない", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("gone", "deleted.md"), g.id);
+
+    store.reconcile([leaf("other", "b.md")], { countMiss: false });
+
+    expect(store.byId(g.id)).toBeDefined();
+    const saved = await snapshot(store, state);
+    expect(saved.fingerprints.gone?.misses).toBeUndefined();
+  });
+
+  it("途中で復元されると misses が 0 に戻る", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    // 1 回失敗
+    store.reconcile([leaf("other", "b.md")], { countMiss: true });
+    expect(store.groups[0].leafIds).toContain("L1");
+
+    // 復元
+    store.reconcile([leaf("L1_new", "a.md")], { countMiss: true });
+    const saved = await snapshot(store, state);
+    expect(saved.fingerprints.L1_new?.misses).toBe(0);
+  });
+
+  it("liveLeaves 0 件で無変化", async () => {
+    const { store } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    store.reconcile([], { countMiss: true });
+
+    expect(store.byId(g.id)?.leafIds).toEqual(["L1"]);
+  });
+
+  it("path の無い fingerprint のメンバーも即消えない", async () => {
+    const { store } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", undefined, "graph"), g.id);
+
+    store.reconcile([leaf("other", "b.md")], { countMiss: true });
+    expect(store.byId(g.id)).toBeDefined();
+  });
+
+  it("孤児 fingerprint の掃除", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    // バンドごと消す
+    store.deleteGroup(g.id);
+    expect(store.groups).toHaveLength(0);
+
+    store.reconcile([leaf("L2", "b.md")], { countMiss: true });
+    const saved = await snapshot(store, state);
+    expect(saved.fingerprints.L1).toBeUndefined();
   });
 
   it("同じパスのリーフが複数あっても 1 つにしか復元しない", async () => {
@@ -230,22 +294,99 @@ describe("reconcile (起動時の照合)", () => {
     store.assign(leaf("o1", "same.md"), g.id);
     store.assign(leaf("o2", "same.md"), g.id);
 
-    store.reconcile([leaf("live", "same.md")]);
+    // 1回目は o1 が復元され，o2 は休眠
+    store.reconcile([leaf("live", "same.md")], { countMiss: true });
+    expect(store.byId(g.id)?.leafIds).toEqual(["live", "o2"]);
 
+    // MISS_LIMIT 回繰り返すと o2 も落ちる
+    for (let i = 0; i < MISS_LIMIT - 1; i += 1) {
+      store.reconcile([leaf("live", "same.md")], { countMiss: true });
+    }
     expect(store.byId(g.id)?.leafIds).toEqual(["live"]);
   });
 
-  it("使われなくなった fingerprint を掃除する", async () => {
+  it("countMiss:false (実行中) ではパスが一致しても復元しない", async () => {
+    const { store } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+    store.reconcile([leaf("other", "b.md")], { countMiss: true }); // L1 は休眠
+
+    // 同じファイルを新しいタブで開いただけのリーフを吸い込まない
+    const result = store.reconcile([leaf("other", "b.md"), leaf("opened", "a.md")], { countMiss: false });
+
+    expect(store.byId(g.id)?.leafIds).toEqual(["L1"]);
+    expect(store.groupOf("opened")).toBeUndefined();
+    expect(result.revived).toBe(0);
+  });
+
+  it("休眠メンバーが元の ID のまま現れたら復元として数え，misses を戻す", async () => {
     const { store, state } = await newStore();
     const g = store.createGroup();
-    store.assign(leaf("gone", "x.md"), g.id);
-    store.assign(leaf("live", "y.md"), g.id);
+    store.assign(leaf("L1", "a.md"), g.id);
+    store.reconcile([leaf("other", "b.md")], { countMiss: true }); // ポップアウト未復元
 
-    store.reconcile([leaf("live", "y.md")]);
+    const result = store.reconcile([leaf("other", "b.md"), leaf("L1", "a.md")], { countMiss: false });
 
+    expect(result.revived).toBe(1);
+    expect(store.byId(g.id)?.leafIds).toEqual(["L1"]);
+    expect((await snapshot(store, state)).fingerprints.L1?.misses).toBe(0);
+  });
+
+  it("既に別のバンドに属しているリーフはパスでの復元先にしない", async () => {
+    const { store } = await newStore();
+    const a = store.createGroup();
+    const b = store.createGroup();
+    store.assign(leaf("old", "a.md"), a.id);
+    store.assign(leaf("X", "a.md"), b.id);
+
+    store.reconcile([leaf("X", "a.md")], { countMiss: true });
+
+    expect(store.byId(a.id)?.leafIds).toEqual(["old"]);
+    expect(store.byId(b.id)?.leafIds).toEqual(["X"]);
+    expect(store.groupOf("X")?.id).toBe(b.id);
+  });
+
+  it("seen 済みの不在 ID は countMiss:false の reconcile で path が一致しても復元されない", async () => {
+    const { store } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    const seenIds = new Set(["L1"]);
+    // L1 は seen 済みなので，パスが一致しても復元されない
+    store.reconcile([leaf("L1_new", "a.md")], { countMiss: false, skip: seenIds });
+    expect(store.byId(g.id)?.leafIds).toEqual(["L1"]);
+  });
+});
+
+describe("fingerprint の更新", () => {
+  it("refreshFingerprints が path を更新する", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    store.refreshFingerprints([leaf("L1", "a_new.md")]);
     const saved = await snapshot(store, state);
-    expect(saved.fingerprints.gone).toBeUndefined();
-    expect(saved.fingerprints.live).toBeDefined();
+    expect(saved.fingerprints.L1?.path).toBe("a_new.md");
+  });
+
+  it("path 無しの値では既存 path を保つ", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    store.refreshFingerprints([leaf("L1", undefined)]);
+    const saved = await snapshot(store, state);
+    expect(saved.fingerprints.L1?.path).toBe("a.md");
+  });
+
+  it("rename で path が追従する", async () => {
+    const { store, state } = await newStore();
+    const g = store.createGroup();
+    store.assign(leaf("L1", "a.md"), g.id);
+
+    store.updateFingerprintPath("a.md", "b.md");
+    const saved = await snapshot(store, state);
+    expect(saved.fingerprints.L1?.path).toBe("b.md");
   });
 });
 

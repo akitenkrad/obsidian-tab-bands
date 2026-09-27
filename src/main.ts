@@ -7,6 +7,7 @@ import {
   WorkspaceLeaf,
   WorkspaceParent,
   debounce,
+  TAbstractFile,
 } from "obsidian";
 import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
@@ -31,6 +32,13 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
   private pending: PendingAssignment | null = null;
   /** 直前の layout-change 時点で存在していたリーフ ID */
   private knownLeafIds = new Set<string>();
+  /**
+   * この起動中に一度でも live として観測したリーフ ID．
+   * ここに無い不在 ID だけが «休眠» (復元待ち) で，ある ID は閉じられたタブ．
+   * 閉じたタブを再照合で復元すると，同じファイルを別タブで開いただけで
+   * そのタブがバンドに吸い込まれる．
+   */
+  private seenLeafIds = new Set<string>();
   /** 直前にアクティブだったリーフ ID (アクティブが「動いた」かの判定に使う) */
   private lastActiveLeafId: string | undefined;
   /**
@@ -83,16 +91,31 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
     this.bridge.register();
 
     this.app.workspace.onLayoutReady(() => {
-      this.knownLeafIds = new Set(this.tabLeaves().map((l) => l.id));
-      this.store.reconcile(this.tabLeaves());
+      const leaves = this.tabLeaves();
+      // タブが 1 枚も取れない起動では照合できない．照合も保存もせず，
+      // 次の layout-change / window-open での再照合に任せる (MYTASK-3106)．
+      if (leaves.length === 0) return;
+      this.knownLeafIds = new Set(leaves.map((l) => l.id));
+      this.seenLeafIds = new Set(leaves.map((l) => l.id));
+
+      const before = this.store.snapshot();
+      const result = this.store.reconcile(leaves, { countMiss: true });
       // 前回の終了時にアクティブだったタブが畳んだバンドの中にあることがある．
       // 起動時は「保存された折りたたみ状態」を尊重し，アクティブの方を逃がす．
       const active = this.app.workspace.getMostRecentLeaf();
       this.lastActiveLeafId = active?.id;
       const group = active ? this.store.groupOf(active.id) : undefined;
       if (group?.collapsed) this.evacuateActive(group);
-      void this.store.save();
+      this.store.refreshFingerprints(leaves);
       this.rerender();
+
+      // メンバーやバンドを落とす保存の前に，照合前の内容を退避する．
+      // data.json は gitignore 済みで，消えたら他に痕跡が残らない．
+      const destructive = result.dropped > 0 || result.removedGroups > 0;
+      void (async () => {
+        if (destructive) await this.backup(before);
+        await this.store.save();
+      })();
     });
 
     this.registerEvent(this.app.workspace.on("layout-change", () => this.onLayoutChange()));
@@ -100,8 +123,21 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
 
     // ポップアウトの開閉．タブグループが増減するので装飾と MutationObserver を
     // 張り直す (rerender が watch() ごとやり直す).
-    this.registerEvent(this.app.workspace.on("window-open", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("window-open", () => this.onWindowOpen()));
     this.registerEvent(this.app.workspace.on("window-close", () => this.refresh()));
+
+    // fingerprint を assign 時点のまま放置すると，バンド内のタブで別ファイルを
+    // 開いたり改名したりした後に，起動時の照合でパスから復元できなくなる．
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => {
+        if (this.store.refreshFingerprints(this.tabLeaves())) void this.store.save();
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
+        if (this.store.updateFingerprintPath(oldPath, file.path)) void this.store.save();
+      }),
+    );
 
     // タブの右クリックメニュー (source === "tab-header") にバンド操作を足す
     this.registerEvent(
@@ -218,6 +254,35 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
 
   // ---------- 状態の確定 ----------
 
+  /** 照合前の data を data.json.bak へ書く．失敗しても本体の処理は止めない */
+  private async backup(data: unknown): Promise<void> {
+    try {
+      await this.app.vault.adapter.write(`${this.manifest.dir}/data.json.bak`, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.warn("[tab-bands] failed to write data.json.bak", e);
+    }
+  }
+
+  /**
+   * 休眠メンバーの再照合．起動時に見つからなかったメンバー (ポップアウトの
+   * 復元が onLayoutReady より遅い等) を，現れた時点でバンドへ戻す．
+   * ここでは何も落とさない．復元したら true．
+   */
+  private reviveDormant(leaves: WorkspaceLeaf[]): boolean {
+    for (const leaf of leaves) this.seenLeafIds.add(leaf.id);
+    const liveIds = new Set(leaves.map((l) => l.id));
+    if (!this.store.hasDormant(liveIds, this.seenLeafIds)) return false;
+    return this.store.reconcile(leaves, { countMiss: false, skip: this.seenLeafIds }).revived > 0;
+  }
+
+  private onWindowOpen(): void {
+    if (this.reviveDormant(this.tabLeaves())) {
+      void this.persist();
+      return;
+    }
+    this.refresh();
+  }
+
   /**
    * layout-change での確定処理．
    *
@@ -226,9 +291,15 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
    * knownLeafIds の更新が飛び，次回に既存タブを「新出」と誤判定するため．
    */
   private onLayoutChange(): void {
+    // 再照合は吸収より先に行う．遅れて現れた休眠メンバーは knownLeafIds に
+    // 無いので，先に absorbNewNeighbors を通すと «新規タブ» として隣の
+    // バンドへ吸収されてしまう．
+    const leaves = this.tabLeaves();
+    const revived = this.reviveDormant(leaves);
+    const refreshed = this.store.refreshFingerprints(leaves);
     const applied = this.applyPending();
     const absorbed = this.absorbNewNeighbors();
-    if (applied || absorbed) {
+    if (revived || refreshed || applied || absorbed) {
       void this.persist();
       return;
     }
@@ -352,7 +423,10 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
     const previousIds = rest.map((leaf) => leaf.id);
     const newIds = await this.relocate(rest, target, hostIndex + 1);
     this.store.remap(group.id, [host.id, ...newIds], [host.id, ...previousIds]);
-    for (const id of newIds) this.knownLeafIds.add(id);
+    for (const id of newIds) {
+      this.knownLeafIds.add(id);
+      this.seenLeafIds.add(id);
+    }
     await this.persist();
     new Notice(t("noticeMovedTabs", { name: this.label(group), count: newIds.length + 1 }));
   }
@@ -560,7 +634,10 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
     const newIds = await this.relocate(members, target, target.children.length);
     this.store.remap(group.id, newIds, previousIds);
     // 作り直しに落ちた場合，そのリーフは「新出」だが吸収対象にしてはいけない
-    for (const id of newIds) this.knownLeafIds.add(id);
+    for (const id of newIds) {
+      this.knownLeafIds.add(id);
+      this.seenLeafIds.add(id);
+    }
     await this.persist();
     new Notice(t("noticeMovedTabs", { name: this.label(group), count: newIds.length }));
   }

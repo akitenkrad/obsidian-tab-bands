@@ -44,6 +44,7 @@ export function groupLabel(group: TabGroup): string {
 export interface LeafFingerprint {
   path?: string;
   viewType: string;
+  misses?: number;
 }
 
 export interface GroupsData {
@@ -68,6 +69,14 @@ const DEFAULT_DATA: GroupsData = {
   settings: DEFAULT_SETTINGS,
 };
 
+export const MISS_LIMIT = 3;
+
+export interface ReconcileResult {
+  revived: number;
+  dropped: number;
+  removedGroups: number;
+}
+
 export class GroupStore {
   private data: GroupsData = structuredClone(DEFAULT_DATA);
   /** leafId -> groupId の逆引きインデックス */
@@ -86,6 +95,10 @@ export class GroupStore {
 
   async save(): Promise<void> {
     await this.plugin.saveData(this.data);
+  }
+
+  snapshot(): GroupsData {
+    return structuredClone(this.data);
   }
 
   private reindex(): void {
@@ -238,35 +251,145 @@ export class GroupStore {
   }
 
   /**
-   * 起動直後に呼ぶ．存在しない leafId を掃除し，
-   * fingerprint が一致する現存リーフがあれば ID を貼り替える．
+   * leafId を現存リーフと照合する．
+   *
+   * - 起動時 (countMiss: true): fingerprint のパスが一致する現存リーフへ ID を
+   *   貼り替える．見つからないメンバーは «休眠» として残し，MISS_LIMIT 回続けて
+   *   見つからなかったときに初めて落とす．一過性の照合失敗 (ポップアウトの
+   *   遅延復元など) でバンドを data.json から消さないため (MYTASK-3106)．
+   * - 実行中 (countMiss: false): 休眠メンバーが元の ID のまま現れたかだけを見る．
+   *   何も落とさない．skip の ID (この起動中に観測済み = 閉じたタブ) は触らない．
    */
-  reconcile(liveLeaves: WorkspaceLeaf[]): void {
+  reconcile(liveLeaves: WorkspaceLeaf[], opts: { countMiss: boolean; skip?: Set<string> }): ReconcileResult {
     const liveIds = new Set(liveLeaves.map((l) => l.id));
+    if (liveLeaves.length === 0) return { revived: 0, dropped: 0, removedGroups: 0 };
+
+    // パスでの復元は起動時 (countMiss) だけ．実行中は同じファイルを新しいタブで
+    // 開いただけのリーフと区別できない．遅れて現れるポップアウトのリーフは
+    // 保存時の leafId を保っているので，実行中は ID の一致だけで足りる．
+    // 既にバンドに属しているリーフは候補にしない (2 バンドに跨らせない)．
     const byPath = new Map<string, WorkspaceLeaf>();
-    for (const leaf of liveLeaves) {
-      const path = leaf.getViewState().state?.file as string | undefined;
-      if (path && !byPath.has(path)) byPath.set(path, leaf);
+    if (opts.countMiss) {
+      for (const leaf of liveLeaves) {
+        if (this.index.has(leaf.id)) continue;
+        const path = leaf.getViewState().state?.file as string | undefined;
+        if (path && !byPath.has(path)) byPath.set(path, leaf);
+      }
     }
+
+    let revived = 0;
+    let dropped = 0;
+    let removedGroups = 0;
 
     for (const group of [...this.data.groups]) {
       const next: string[] = [];
       for (const oldId of group.leafIds) {
         if (liveIds.has(oldId)) {
           next.push(oldId);
+          const fp = this.data.fingerprints[oldId];
+          if (fp?.misses) {
+            // 休眠していたメンバーが ID のまま現れた (ポップアウトの遅延復元など)
+            fp.misses = 0;
+            if (!opts.countMiss) revived += 1;
+          }
           continue;
         }
-        const fp = this.data.fingerprints[oldId];
-        const revived = fp?.path ? byPath.get(fp.path) : undefined;
-        if (revived && !next.includes(revived.id)) {
-          next.push(revived.id);
-          this.data.fingerprints[revived.id] = fp;
+
+        if (opts.skip?.has(oldId)) {
+          next.push(oldId);
+          continue;
         }
-        delete this.data.fingerprints[oldId];
+
+        const fp = this.data.fingerprints[oldId] ?? { viewType: "unknown" };
+        const revivedLeaf = fp.path ? byPath.get(fp.path) : undefined;
+
+        if (revivedLeaf && !next.includes(revivedLeaf.id)) {
+          byPath.delete(fp.path as string);
+          next.push(revivedLeaf.id);
+          this.data.fingerprints[revivedLeaf.id] = { ...fp, misses: 0 };
+          delete this.data.fingerprints[oldId];
+          revived += 1;
+        } else {
+          if (opts.countMiss) {
+            const currentMiss = (fp.misses ?? 0) + 1;
+            if (currentMiss >= MISS_LIMIT) {
+              dropped += 1;
+              delete this.data.fingerprints[oldId];
+            } else {
+              this.data.fingerprints[oldId] = { ...fp, misses: currentMiss };
+              next.push(oldId);
+            }
+          } else {
+            next.push(oldId);
+          }
+        }
       }
       group.leafIds = next;
-      if (next.length === 0) this.data.groups.remove(group);
+      if (next.length === 0) {
+        this.data.groups.remove(group);
+        removedGroups += 1;
+      }
     }
+
+    const currentMemberIds = new Set<string>();
+    for (const g of this.data.groups) {
+      for (const id of g.leafIds) currentMemberIds.add(id);
+    }
+    for (const id of Object.keys(this.data.fingerprints)) {
+      if (!currentMemberIds.has(id)) delete this.data.fingerprints[id];
+    }
+
     this.reindex();
+    return { revived, dropped, removedGroups };
+  }
+
+  /** 休眠メンバー (liveIds に存在せず，かつ seenIds にも存在しない ID) が残っているか判定する */
+  hasDormant(liveIds: Set<string>, seenIds: Set<string>): boolean {
+    for (const g of this.data.groups) {
+      if (g.leafIds.some((id) => !liveIds.has(id) && !seenIds.has(id))) return true;
+    }
+    return false;
+  }
+
+  /** live なメンバーの fingerprint を最新にする．変化があれば true を返す */
+  refreshFingerprints(liveLeaves: WorkspaceLeaf[]): boolean {
+    let changed = false;
+    for (const leaf of liveLeaves) {
+      const gid = this.index.get(leaf.id);
+      if (!gid) continue;
+      const state = leaf.getViewState();
+      const newPath = state.state?.file as string | undefined;
+      const fp = this.data.fingerprints[leaf.id];
+      if (fp) {
+        if (fp.viewType !== state.type) {
+          fp.viewType = state.type;
+          changed = true;
+        }
+        if (newPath !== undefined && fp.path !== newPath) {
+          fp.path = newPath;
+          changed = true;
+        }
+      } else {
+        this.data.fingerprints[leaf.id] = {
+          viewType: state.type,
+          path: newPath,
+        };
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** vault の rename イベントで path を書き換える．変化があれば true を返す */
+  updateFingerprintPath(oldPath: string, newPath: string): boolean {
+    let changed = false;
+    for (const id in this.data.fingerprints) {
+      const fp = this.data.fingerprints[id];
+      if (fp.path === oldPath) {
+        fp.path = newPath;
+        changed = true;
+      }
+    }
+    return changed;
   }
 }
