@@ -13,7 +13,7 @@ import { TabStripDecorator } from "./decorator";
 import { DragResult, PendingAssignment, TabDragBridge } from "./drag";
 import { groupLabel, GroupStore, TabGroup } from "./store";
 import { t } from "./i18n";
-import { absorptions, bandToJoinAtDrop, escapeTarget, type TabSlot } from "./rules";
+import { absorptions, bandToJoinAtDrop, escapeTarget, focusAfterClose, type TabSlot } from "./rules";
 import { DEFAULT_SETTINGS, type TabBandsSettings } from "./settings";
 import { TabBandsSettingTab, type SettingsHost } from "./settings-tab";
 import { allTabLeaves, leafById, tabGroups } from "./workspace-tree";
@@ -52,6 +52,11 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
    * セッション限りの状態でよい (起動時は onLayoutReady の退避で入り直す).
    */
   private trappedLeafIds = new Set<string>();
+  /**
+   * 0 より大きい間は，タブを閉じたときのフォーカス移動 (patchDetach) を行わない．
+   * プラグイン自身がまとめて detach する操作 (一括クローズ・移送) で使う．
+   */
+  private suppressCloseFocus = 0;
   private refresh = debounce(() => this.rerender(), 30, true);
 
   async onload(): Promise<void> {
@@ -118,6 +123,7 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
       })();
     });
 
+    this.patchDetach();
     this.registerEvent(this.app.workspace.on("layout-change", () => this.onLayoutChange()));
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onActiveLeafChange()));
 
@@ -597,7 +603,7 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
       await created.setViewState(viewState);
       created.setEphemeralState(ephemeral);
       newIds.push(created.id);
-      leaf.detach();
+      this.withoutCloseFocus(() => leaf.detach());
     }
     return newIds;
   }
@@ -656,6 +662,79 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
   /** タブストリップに並ぶ全リーフ (ポップアウトのぶんも含む) */
   private tabLeaves(): WorkspaceLeaf[] {
     return allTabLeaves(this.app);
+  }
+
+  // ---------- タブを閉じたときのフォーカス ----------
+
+  /**
+   * WorkspaceLeaf.prototype.detach を包み，バンド内のアクティブなタブを
+   * 閉じたときのフォーカス先を設定 (closeFocusSide) の側のメンバーにする．
+   *
+   * タブの × ボタンも «タブを閉じる» コマンドも最終的に leaf.detach() を通る．
+   * 閉じた後のタブ列からは «どこにあったか» が分からないので，判断は
+   * 閉じる前に済ませ，適用は閉じた後に行う．
+   *
+   * 包んだ関数の中で何が起きても，元の detach は必ず呼ぶ
+   * (タブが閉じられなくなるのが最悪の壊れ方なので)．
+   */
+  private patchDetach(): void {
+    const proto = WorkspaceLeaf.prototype;
+    const original = proto.detach;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const plugin = this;
+    let active = true;
+
+    const patched = function (this: WorkspaceLeaf): void {
+      const target = active
+        ? plugin.safely("Choosing focus after close", () => plugin.focusTargetOnClose(this), null)
+        : null;
+      original.call(this);
+      if (target) plugin.focusAfterDetach(target);
+    };
+    proto.detach = patched;
+
+    this.register(() => {
+      // 後から別のプラグインが包み直していたら，そちらを外さないよう
+      // 自分の層だけを素通しにする．
+      if (proto.detach === patched) proto.detach = original;
+      else active = false;
+    });
+  }
+
+  /** 閉じようとしているリーフの次にアクティブにすべきリーフ (無ければ null) */
+  private focusTargetOnClose(leaf: WorkspaceLeaf): WorkspaceLeaf | null {
+    if (this.suppressCloseFocus > 0) return null;
+    // 背景のタブを閉じてもフォーカスは動かさない
+    if (this.app.workspace.getMostRecentLeaf()?.id !== leaf.id) return null;
+
+    const siblings = (leaf.parent?.children ?? []) as WorkspaceLeaf[];
+    const targetId = focusAfterClose(this.slotsOf(siblings), leaf.id, this.settings.closeFocusSide);
+    return targetId ? (siblings.find((l) => l.id === targetId) ?? null) : null;
+  }
+
+  /**
+   * 閉じた後にフォーカスを移す．本体が閉じた後のアクティブを非同期で
+   * 選び直す可能性に備え，次のタスクでもう一度確かめる (冪等)．
+   */
+  private focusAfterDetach(target: WorkspaceLeaf): void {
+    const apply = () => {
+      // 移した先も閉じられた/別ペインへ移った場合は何もしない
+      const parent = target.parent as WorkspaceParent | undefined;
+      if (!parent?.children?.includes(target)) return;
+      if (this.app.workspace.getMostRecentLeaf()?.id === target.id) return;
+      this.app.workspace.setActiveLeaf(target, { focus: true });
+    };
+    apply();
+    window.setTimeout(apply, 0);
+  }
+
+  private withoutCloseFocus(fn: () => void): void {
+    this.suppressCloseFocus += 1;
+    try {
+      fn();
+    } finally {
+      this.suppressCloseFocus -= 1;
+    }
   }
 
   // ---------- アクティブタブと折りたたみ ----------
@@ -788,7 +867,9 @@ export default class TabBandsPlugin extends Plugin implements SettingsHost {
   private async closeGroup(group: TabGroup): Promise<void> {
     const name = this.label(group);
     const targets = this.tabLeaves().filter((l) => group.leafIds.includes(l.id));
-    for (const leaf of targets) leaf.detach();
+    this.withoutCloseFocus(() => {
+      for (const leaf of targets) leaf.detach();
+    });
     this.store.deleteGroup(group.id);
     await this.persist();
     new Notice(t("noticeClosedTabs", { name, count: targets.length }));

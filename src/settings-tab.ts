@@ -1,6 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, debounce } from "obsidian";
 import { t } from "./i18n";
-import { CHIP_NAME_WIDTH, type TabBandsSettings } from "./settings";
+import { CHIP_NAME_WIDTH, type CloseFocusSide, type TabBandsSettings } from "./settings";
 
 /**
  * 設定画面から見たプラグイン側の口．
@@ -59,6 +59,19 @@ export class TabBandsSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.host.settings.absorbNewTabs)
           .onChange((value) => void this.host.updateSettings({ absorbNewTabs: value })),
+      );
+
+    new Setting(containerEl)
+      .setName(t("settingCloseFocusName"))
+      .setDesc(t("settingCloseFocusDesc"))
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("left", t("settingCloseFocusLeft"))
+          .addOption("right", t("settingCloseFocusRight"))
+          .setValue(this.host.settings.closeFocusSide)
+          .onChange(
+            (value) => void this.host.updateSettings({ closeFocusSide: value as CloseFocusSide }),
+          ),
       );
   }
 }

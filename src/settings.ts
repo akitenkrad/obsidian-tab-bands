@@ -11,6 +11,8 @@
  * どちらも実害が観測されていないので，出さない側に倒している．
  */
 
+import type { Side } from "./rules";
+
 export interface TabBandsSettings {
   /**
    * チップに出すバンド名の最大幅 (ch)．
@@ -22,11 +24,22 @@ export interface TabBandsSettings {
    * 挟まれ吸収と «メンバーから開かれたタブ» の吸収をまとめて 1 つで切る．
    */
   absorbNewTabs: boolean;
+  /**
+   * バンド内のアクティブなタブを閉じたとき，同じバンドのどちら側の
+   * メンバーへフォーカスを移すか (rules.ts の focusAfterClose)．
+   * その側にメンバーが無ければ反対側へ移す．
+   */
+  closeFocusSide: CloseFocusSide;
 }
+
+export type CloseFocusSide = Side;
+
+export const CLOSE_FOCUS_SIDES: readonly CloseFocusSide[] = ["left", "right"];
 
 export const DEFAULT_SETTINGS: TabBandsSettings = {
   chipNameMaxWidth: 12,
   absorbNewTabs: true,
+  closeFocusSide: "left",
 };
 
 /**
@@ -52,6 +65,9 @@ export function normalizeSettings(raw: unknown): TabBandsSettings {
       typeof partial.absorbNewTabs === "boolean"
         ? partial.absorbNewTabs
         : DEFAULT_SETTINGS.absorbNewTabs,
+    closeFocusSide: CLOSE_FOCUS_SIDES.includes(partial.closeFocusSide as CloseFocusSide)
+      ? (partial.closeFocusSide as CloseFocusSide)
+      : DEFAULT_SETTINGS.closeFocusSide,
   };
 }
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { absorptions, bandToJoinAtDrop, escapeTarget, type TabSlot } from "../src/rules";
+import {
+  absorptions,
+  bandToJoinAtDrop,
+  escapeTarget,
+  focusAfterClose,
+  type TabSlot,
+} from "../src/rules";
 
 /**
  * タブ列を短い記法で組む．
@@ -155,5 +161,44 @@ describe("escapeTarget", () => {
 
   it("アクティブ自身は逃げ先にしない", () => {
     expect(escapeTarget(strip("a:G"), "a", "G")).toBeNull();
+  });
+});
+
+describe("focusAfterClose", () => {
+  it("左を優先: 中央のメンバーを閉じると左隣のメンバー", () => {
+    expect(focusAfterClose(strip("a:G", "b:G", "c:G"), "b", "left")).toBe("a");
+  });
+
+  it("右を優先: 中央のメンバーを閉じると右隣のメンバー", () => {
+    expect(focusAfterClose(strip("a:G", "b:G", "c:G"), "b", "right")).toBe("c");
+  });
+
+  it("左を優先でも，左にメンバーが無ければ右隣のメンバー (バンド外の左隣ではない)", () => {
+    expect(focusAfterClose(strip("x", "a:G", "b:G"), "a", "left")).toBe("b");
+  });
+
+  it("右を優先でも，右にメンバーが無ければ左隣のメンバー (バンド外の右隣ではない)", () => {
+    expect(focusAfterClose(strip("a:G", "b:G", "x"), "b", "right")).toBe("a");
+  });
+
+  it("唯一のメンバーなら本体の既定に任せる", () => {
+    expect(focusAfterClose(strip("x", "a:G", "y"), "a", "left")).toBeNull();
+  });
+
+  it("無所属のタブなら本体の既定に任せる", () => {
+    expect(focusAfterClose(strip("a:G", "x", "b:G"), "x", "left")).toBeNull();
+  });
+
+  it("畳まれたバンドのタブなら本体の既定に任せる", () => {
+    expect(focusAfterClose(strip("a:G!", "b:G!"), "b", "left")).toBeNull();
+  });
+
+  it("間に別のタブが挟まっても同じバンドの最も近いメンバーを選ぶ", () => {
+    expect(focusAfterClose(strip("a:G", "h:H", "x", "b:G", "c:G"), "b", "left")).toBe("a");
+    expect(focusAfterClose(strip("a:G", "b:G", "h:H", "c:G"), "b", "right")).toBe("c");
+  });
+
+  it("列に無いリーフなら null", () => {
+    expect(focusAfterClose(strip("a:G", "b:G"), "zzz", "left")).toBeNull();
   });
 });

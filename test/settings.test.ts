@@ -9,9 +9,12 @@ describe("設定の正規化", () => {
   });
 
   it("正しい値はそのまま通す", () => {
-    expect(normalizeSettings({ chipNameMaxWidth: 20, absorbNewTabs: false })).toEqual({
+    expect(
+      normalizeSettings({ chipNameMaxWidth: 20, absorbNewTabs: false, closeFocusSide: "right" }),
+    ).toEqual({
       chipNameMaxWidth: 20,
       absorbNewTabs: false,
+      closeFocusSide: "right",
     });
   });
 
@@ -36,6 +39,15 @@ describe("設定の正規化", () => {
     expect(normalizeSettings({ absorbNewTabs: 1 }).absorbNewTabs).toBe(
       DEFAULT_SETTINGS.absorbNewTabs,
     );
+  });
+
+  it("閉じた後のフォーカスの既定は左", () => {
+    expect(DEFAULT_SETTINGS.closeFocusSide).toBe("left");
+  });
+
+  it("left / right 以外のフォーカス側は既定値に落とす", () => {
+    expect(normalizeSettings({ closeFocusSide: "up" }).closeFocusSide).toBe("left");
+    expect(normalizeSettings({ closeFocusSide: 1 }).closeFocusSide).toBe("left");
   });
 
   it("知らないキーは捨てる", () => {

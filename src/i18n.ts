@@ -51,6 +51,12 @@ const EN = {
     "Add a new tab to a band when it opens between two of its members, " +
     "or right after the member it was opened from. " +
     "Turn this off to put every tab into a band by hand.",
+  settingCloseFocusName: "Focus after closing a tab in a band",
+  settingCloseFocusDesc:
+    "Which member of the same band becomes active when you close the active tab. " +
+    "If there is no member on that side, the other side is used.",
+  settingCloseFocusLeft: "Left neighbour",
+  settingCloseFocusRight: "Right neighbour",
 
   // 名前の変更ダイアログ
   renameTitle: "Rename band",
@@ -114,6 +120,12 @@ const JA: Record<Key, string> = {
     "バンドのメンバーに挟まれた位置に開かれたタブと，" +
     "メンバーから開かれたタブを，そのバンドに入れる．" +
     "切ると，バンドへの追加はすべて手動になる．",
+  settingCloseFocusName: "バンド内のタブを閉じた後のフォーカス",
+  settingCloseFocusDesc:
+    "アクティブなタブを閉じたとき，同じバンドのどちら側のメンバーをアクティブにするか．" +
+    "その側にメンバーが無ければ反対側へ移す．",
+  settingCloseFocusLeft: "左隣",
+  settingCloseFocusRight: "右隣",
 
   renameTitle: "バンド名を変更",
   renameNameLabel: "名前",

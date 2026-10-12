@@ -18,6 +18,8 @@ export interface TabSlot {
   collapsed?: boolean;
 }
 
+export type Side = "left" | "right";
+
 export interface Absorption {
   leafId: string;
   groupId: string;
@@ -113,4 +115,42 @@ export function escapeTarget(
     (s) => s.leafId !== activeLeafId && s.groupId !== collapsingGroupId && !s.collapsed,
   );
   return escape?.leafId ?? null;
+}
+
+/**
+ * バンド内のアクティブなタブを閉じたあと，フォーカスを移すメンバーを決める．
+ *
+ * 本体の既定は «右隣のタブ» で，バンドの右端のメンバーを閉じるとバンドの
+ * 外へフォーカスが抜ける．バンドを作業の単位として使っている間はその中に
+ * 留まる方が自然なので，同じバンドのメンバーだけを候補にする．
+ *
+ * 探す順は prefer 側の最も近いメンバー → 反対側の最も近いメンバー．
+ * 間に別のタブが挟まっていても探し続ける (バンドは通常連続しているが，
+ * それを前提にしない)．閉じるタブが無所属・畳んだバンドの中・最後の
+ * メンバーなら null (本体の既定に任せる)．
+ *
+ * «アクティブなタブを閉じたときだけ» という条件は呼び出し側 (main.ts) が持つ．
+ * 背景のタブを閉じてもフォーカスは動かさない．
+ *
+ * @param slots 閉じる前のタブ列 (閉じるタブ自身を含む)
+ */
+export function focusAfterClose(
+  slots: readonly TabSlot[],
+  closingLeafId: string,
+  prefer: Side,
+): string | null {
+  const index = slots.findIndex((s) => s.leafId === closingLeafId);
+  if (index < 0) return null;
+  const { groupId, collapsed } = slots[index];
+  if (!groupId || collapsed) return null;
+
+  const left = () => {
+    for (let i = index - 1; i >= 0; i -= 1) if (slots[i].groupId === groupId) return slots[i].leafId;
+    return null;
+  };
+  const right = () => {
+    for (let i = index + 1; i < slots.length; i += 1) if (slots[i].groupId === groupId) return slots[i].leafId;
+    return null;
+  };
+  return prefer === "left" ? (left() ?? right()) : (right() ?? left());
 }

@@ -44,6 +44,7 @@ Settings → Community plugins → **Tab Bands** (the gear icon).
 | --- | --- | --- |
 | Band name width | 12 | Maximum width of the band name on a chip, in characters (4–32). Lower it when your theme makes the tab strip feel cramped. The name is ellipsised beyond it; the chip of an unnamed band is unaffected |
 | Absorb newly opened tabs | on | Turns off both cases described above at once. With it off, a tab only joins a band by hand (drag, or the context menu) |
+| Focus after closing a tab in a band | Left neighbour | When you close the active tab of an expanded band, the nearest member of the same band on this side becomes active; if there is none, the nearest one on the other side. Closing the last member, or a background tab, leaves the focus to Obsidian |
 
 Everything else is fixed: the colour of a new band is auto-assigned from unused
 colours, and a collapsed band shows `Band name (N)`. The reasons are in
