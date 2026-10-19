@@ -11,7 +11,7 @@
 | Auto-join for new tabs | Open a tab between two members / **open a tab while a member of the band is active** |
 | Remove from a band | Right-click the tab → Remove from band |
 | Collapse / expand | Click the chip. While collapsed, clicking the tab title works too |
-| Rename, recolour, ungroup, close all | Right-click the chip |
+| Rename, change colour, ungroup, close all | Right-click the chip |
 | Move to a pane | Right-click the chip → Move to pane N / Move to a new pane |
 | Move a whole band by dragging | Drag the tab **while the band is collapsed** (within a pane or across panes) |
 | Commands | Four, starting with "Organize active tab into a new band" |
@@ -25,6 +25,18 @@ A new band is named `Tab-1`, `Tab-2`, … by default. Numbering picks the lowest
 unused number, so deleting a band frees its number for reuse. A name may also be
 empty: the chip of an unnamed band shows only the colour dot, but still reserves
 the width of `Tab-X` so it does not collapse into the dot alone.
+
+## Band colours
+
+Right-click a chip and choose **Change colour…**. The dialog offers 18 preset
+colours; choosing a swatch applies it immediately. For any other colour, use the
+colour picker or enter an RGB value, check the preview, and choose **Save**.
+
+The text field accepts `#rgb`, `#rrggbb`, `rgb(r, g, b)`, and three integer RGB
+components separated by commas or spaces (for example, `26, 115, 232` or
+`26 115 232`). A six-digit hex value without `#`, such as `1a73e8`, is also
+accepted. Hex digits are case-insensitive, whitespace is allowed around values,
+and every RGB component must be an integer from 0 to 255.
 
 ## When a new tab joins a band automatically
 
@@ -46,8 +58,9 @@ Settings → Community plugins → **Tab Bands** (the gear icon).
 | Absorb newly opened tabs | on | Turns off both cases described above at once. With it off, a tab only joins a band by hand (drag, or the context menu) |
 | Focus after closing a tab in a band | Left neighbour | When you close the active tab of an expanded band, the nearest member of the same band on this side becomes active; if there is none, the nearest one on the other side. Closing the last member, or a background tab, leaves the focus to Obsidian |
 
-Everything else is fixed: the colour of a new band is auto-assigned from unused
-colours, and a collapsed band shows `Band name (N)`. The reasons are in
+Everything else is fixed: the initial colour of a new band is auto-assigned from
+the 18 presets, preferring unused preset colours, and a collapsed band shows
+`Band name (N)`. The reasons are in
 [Internals](internals.md). The settings are stored in the same `data.json` as the
 bands.
 

@@ -100,6 +100,22 @@ describe("色の割り当て", () => {
     for (let i = 0; i < COLOR_ORDER.length; i += 1) store.createGroup();
     expect(store.createGroup().color).toBe(COLOR_ORDER[0]);
   });
+
+  it("任意色のバンドはプリセットの使用数に数えない", async () => {
+    const groups = [
+      { id: "custom", name: "Custom", color: "#123456", collapsed: false, leafIds: [] },
+      ...COLOR_ORDER.map((color, index) => ({
+        id: `preset-${index}`,
+        name: `Preset ${index}`,
+        color,
+        collapsed: false,
+        leafIds: [],
+      })),
+    ];
+    const { store } = await newStore({ version: 1, groups, fingerprints: {} });
+
+    expect(store.createGroup().color).toBe(COLOR_ORDER[0]);
+  });
 });
 
 describe("assign / unassign", () => {
@@ -407,6 +423,39 @@ describe("load", () => {
   it("空の data.json でも既定値で立ち上がる", async () => {
     const { store } = await newStore(null);
     expect(store.groups).toEqual([]);
+  });
+
+  it("色を検証し，任意色を小文字へ正規化する", async () => {
+    const groups = [
+      { id: "invalid", name: "Invalid", color: "chartreuse", collapsed: false, leafIds: [] },
+      { id: "upper", name: "Upper", color: "#1A73E8", collapsed: false, leafIds: [] },
+      { id: "preset", name: "Preset", color: "indigo", collapsed: false, leafIds: [] },
+      { id: "custom", name: "Custom", color: "#123456", collapsed: false, leafIds: [] },
+    ];
+    const { store } = await newStore({ version: 1, groups, fingerprints: {} });
+
+    expect(store.groups.map((group) => group.color)).toEqual(["grey", "#1a73e8", "indigo", "#123456"]);
+  });
+});
+
+describe("recolor", () => {
+  it("正規の任意色を適用できる", async () => {
+    const { store } = await newStore();
+    const group = store.createGroup();
+
+    store.recolor(group.id, "#1a73e8");
+
+    expect(group.color).toBe("#1a73e8");
+  });
+
+  it("不正な色は無視する", async () => {
+    const { store } = await newStore();
+    const group = store.createGroup();
+    const before = group.color;
+
+    store.recolor(group.id, "not-a-colour");
+
+    expect(group.color).toBe(before);
   });
 });
 

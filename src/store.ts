@@ -1,31 +1,23 @@
 import type { Plugin, WorkspaceLeaf } from "obsidian";
+import {
+  COLOR_ORDER,
+  isPresetColor,
+  isValidGroupColor,
+  normalizeStoredGroupColor,
+  type GroupColor,
+  type TabGroupColor,
+} from "./colors";
 import { t } from "./i18n";
 import { DEFAULT_SETTINGS, normalizeSettings, type TabBandsSettings } from "./settings";
 
-/**
- * バンドの色パレット (9 色).
- * Material Design 系の彩度の高い色を選んでおり，ライト/ダークどちらの
- * テーマでも背景と十分なコントラストが出る値にしてある.
- */
-export const GROUP_COLORS = {
-  grey: "#5f6368",
-  blue: "#1a73e8",
-  red: "#d93025",
-  yellow: "#f9ab00",
-  green: "#1e8e3e",
-  pink: "#d01884",
-  purple: "#9334e6",
-  cyan: "#007b83",
-  orange: "#fa903e",
-} as const;
-
-export type GroupColor = keyof typeof GROUP_COLORS;
-export const COLOR_ORDER = Object.keys(GROUP_COLORS) as GroupColor[];
+// 従来の import 元を壊さないため，色定義は store からも公開する．
+export { COLOR_ORDER, GROUP_COLORS } from "./colors";
+export type { GroupColor, TabGroupColor } from "./colors";
 
 export interface TabGroup {
   id: string;
   name: string;
-  color: GroupColor;
+  color: TabGroupColor;
   collapsed: boolean;
   /** WorkspaceLeaf.id の配列．タブストリップ上の並び順とは独立に保持する */
   leafIds: string[];
@@ -87,9 +79,12 @@ export class GroupStore {
   async load(): Promise<void> {
     const raw = (await this.plugin.loadData()) as Partial<GroupsData> | null;
     this.data = { ...structuredClone(DEFAULT_DATA), ...(raw ?? {}) };
-    // 展開しただけでは，設定を持たない過去の data.json や手で壊された値が
-    // そのまま入る．設定だけは必ず正規化を通す．
+    // 展開しただけでは，過去の data.json や手で壊された値がそのまま入る．
+    // 設定と色は必ず正規化を通す．
     this.data.settings = normalizeSettings(raw?.settings);
+    for (const group of this.data.groups) {
+      group.color = normalizeStoredGroupColor(group.color) ?? "grey";
+    }
     this.reindex();
   }
 
@@ -151,8 +146,11 @@ export class GroupStore {
 
   /** name を省略すると `Tab-N` の連番が入る．明示的に "" を渡せば無名になる */
   createGroup(name: string = this.nextDefaultName()): TabGroup {
-    const used = new Set(this.data.groups.map((g) => g.color));
-    const color = COLOR_ORDER.find((c) => !used.has(c)) ?? COLOR_ORDER[this.data.groups.length % COLOR_ORDER.length];
+    const presetColors = this.data.groups.map((group) => group.color).filter(isPresetColor);
+    const used = new Set<GroupColor>(presetColors);
+    const color =
+      COLOR_ORDER.find((candidate) => !used.has(candidate)) ??
+      COLOR_ORDER[presetColors.length % COLOR_ORDER.length];
     const group: TabGroup = {
       id: `g-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       name,
@@ -232,7 +230,8 @@ export class GroupStore {
     if (g) g.name = name;
   }
 
-  recolor(groupId: string, color: GroupColor): void {
+  recolor(groupId: string, color: string): void {
+    if (!isValidGroupColor(color)) return;
     const g = this.byId(groupId);
     if (g) g.color = color;
   }

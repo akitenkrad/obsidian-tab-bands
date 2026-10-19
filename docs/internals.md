@@ -49,6 +49,11 @@
   older versions wrote no settings at all. The chip name width reaches the CSS as
   a variable **set on the chip element** (`--tb-chip-name-max-width`); setting it
   on `document.body` would not reach popout windows.
+- **Automatic colours use presets only.** New bands prefer an unused entry from
+  the 18-colour preset order, then wrap to its beginning. A custom RGB colour is
+  neither treated as a used preset nor counted when wrapping. `src/colors.ts`
+  owns parsing, validation and rendering fallback; loading normalizes uppercase
+  six-digit hex and replaces an invalid stored colour with grey.
 - **A drop on a chip inserts at the head of the band** (Chrome appends to the
   tail). The chip lives inside the first member's tab header, so Obsidian reads a
   drop there as "the left half of the first member" and carries the tab to just
@@ -167,6 +172,7 @@ is put back and the old path of `createLeafInParent()` + `setViewState()` +
 | File | Responsibility |
 | --- | --- |
 | `src/main.ts` | The plugin itself: commands, menus, event wiring, pane moves |
+| `src/colors.ts` | Preset colours, RGB parsing, validation and colour resolution |
 | `src/decorator.ts` | Decorating the tab strip: building and placing chips, collapsed display |
 | `src/drag.ts` | Watching drags: detecting drops on chips, reporting drag results |
 | `src/i18n.ts` | UI text dictionary (English / Japanese) |

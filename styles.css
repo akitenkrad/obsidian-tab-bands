@@ -139,3 +139,49 @@
 .tb-chip-host.tb-chip-host.tb-collapsed .tb-chip {
   padding: 2px 4px;
 }
+
+/* ---- 色の変更ダイアログ ---- */
+.tb-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(28px, 1fr));
+  gap: 8px;
+  margin: 12px 0 20px;
+}
+
+.tb-color-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 28px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.tb-color-swatch:hover,
+.tb-color-swatch:focus-visible {
+  transform: scale(1.08);
+}
+
+.tb-color-swatch-selected {
+  outline: 2px solid var(--text-normal);
+  outline-offset: 2px;
+}
+
+.tb-color-input-invalid {
+  border-color: var(--text-error);
+  box-shadow: 0 0 0 1px var(--text-error);
+}
+
+.tb-color-preview.tb-chip {
+  width: fit-content;
+  margin: 12px 0;
+  cursor: default;
+  pointer-events: none;
+}
+
+@media (max-width: 500px) {
+  .tb-color-swatches {
+    grid-template-columns: repeat(6, minmax(28px, 1fr));
+  }
+}

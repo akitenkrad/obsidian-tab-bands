@@ -30,6 +30,7 @@ const EN = {
   chipMenuExpand: "Expand band",
   chipMenuCollapse: "Collapse band",
   chipMenuRename: "Rename band",
+  chipMenuChangeColour: "Change colour…",
   chipMenuMoveTo: "Move to {target}",
   chipMenuMoveToNewPane: "Move to a new pane",
   chipMenuUngroup: "Ungroup band",
@@ -64,6 +65,14 @@ const EN = {
   renameNameDesc: "Leave it empty to show only the colour dot",
   renamePlaceholder: "(unnamed)",
   renameSave: "Save",
+
+  // 色の変更ダイアログ
+  colorTitle: "Change band colour",
+  colorCustomLabel: "Custom colour (RGB)",
+  colorCustomDesc: "Enter #rgb, #rrggbb, rgb(r, g, b), or three RGB values separated by commas or spaces.",
+  colorInputPlaceholder: "#rrggbb or r, g, b",
+  colorPreview: "Preview",
+  colorSave: "Save",
 
   // 移動先のペイン
   paneLabel: "Pane {n} ({title})",
@@ -101,6 +110,7 @@ const JA: Record<Key, string> = {
   chipMenuExpand: "バンドを展開",
   chipMenuCollapse: "バンドを折りたたむ",
   chipMenuRename: "バンド名を変更",
+  chipMenuChangeColour: "色を変更…",
   chipMenuMoveTo: "{target} へ移動",
   chipMenuMoveToNewPane: "新しいペインへ移動",
   chipMenuUngroup: "バンドを解除",
@@ -132,6 +142,13 @@ const JA: Record<Key, string> = {
   renameNameDesc: "空にすると色ドットのみのチップになります",
   renamePlaceholder: "(無名)",
   renameSave: "保存",
+
+  colorTitle: "バンドの色を変更",
+  colorCustomLabel: "任意の色 (RGB)",
+  colorCustomDesc: "#rgb，#rrggbb，rgb(r, g, b)，またはカンマ／空白区切りの RGB 値を入力します．",
+  colorInputPlaceholder: "#rrggbb または r, g, b",
+  colorPreview: "プレビュー",
+  colorSave: "保存",
 
   paneLabel: "ペイン {n} ({title})",
 

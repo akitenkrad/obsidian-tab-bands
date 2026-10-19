@@ -1,12 +1,29 @@
-import { App, Menu, WorkspaceLeaf, WorkspaceParent } from "obsidian";
+import {
+  App,
+  ButtonComponent,
+  ColorComponent,
+  Menu,
+  Modal,
+  Setting,
+  TextComponent,
+  WorkspaceLeaf,
+  WorkspaceParent,
+} from "obsidian";
+import {
+  COLOR_ORDER,
+  GROUP_COLORS,
+  parseColorInput,
+  resolveColor,
+  type TabGroupColor,
+} from "./colors";
 import { t } from "./i18n";
-import { COLOR_ORDER, GROUP_COLORS, groupLabel, GroupStore, TabGroup } from "./store";
+import { groupLabel, GroupStore, TabGroup } from "./store";
 import { tabGroups } from "./workspace-tree";
 
 export interface DecoratorCallbacks {
   onToggleCollapse(group: TabGroup): void;
   onRename(group: TabGroup): void;
-  onRecolor(group: TabGroup, color: (typeof COLOR_ORDER)[number]): void;
+  onRecolor(group: TabGroup, color: TabGroupColor): void;
   onUngroup(group: TabGroup): void;
   onCloseGroup(group: TabGroup): void;
   /** 移動先候補のペイン一覧 (現在のペインは除く) */
@@ -107,7 +124,7 @@ export class TabStripDecorator {
   }
 
   private renderRun(group: TabGroup, run: WorkspaceLeaf[]): void {
-    const color = GROUP_COLORS[group.color];
+    const color = resolveColor(group.color);
 
     run.forEach((leaf, idx) => {
       const el = leaf.tabHeaderEl;
@@ -151,7 +168,7 @@ export class TabStripDecorator {
 
   private buildChip(group: TabGroup, memberCount: number): HTMLElement {
     const chip = createDiv({ cls: CHIP_CLASS });
-    chip.style.setProperty("--tb-color", GROUP_COLORS[group.color]);
+    chip.style.setProperty("--tb-color", resolveColor(group.color));
     // 幅は CSS 変数でチップ自身に載せる．body に載せるとポップアウト
     // ウィンドウ (別 document) に届かない．
     chip.style.setProperty("--tb-chip-name-max-width", `${this.store.settings.chipNameMaxWidth}ch`);
@@ -234,14 +251,14 @@ export class TabStripDecorator {
     );
     menu.addItem((item) => item.setTitle(t("chipMenuRename")).setIcon("pencil").onClick(() => this.cb.onRename(group)));
     menu.addSeparator();
-    for (const color of COLOR_ORDER) {
-      menu.addItem((item) =>
-        item
-          .setTitle(color)
-          .setChecked(group.color === color)
-          .onClick(() => this.cb.onRecolor(group, color)),
-      );
-    }
+    menu.addItem((item) =>
+      item
+        .setTitle(t("chipMenuChangeColour"))
+        .setIcon("palette")
+        .onClick(() =>
+          new ColorModal(this.app, group.color, (color) => this.cb.onRecolor(group, color)).open(),
+        ),
+    );
     menu.addSeparator();
     for (const target of this.cb.listMoveTargets(group)) {
       menu.addItem((item) =>
@@ -285,5 +302,105 @@ export class TabStripDecorator {
       observer.observe(strip, { childList: true, subtree: true });
       this.observers.push(observer);
     }
+  }
+}
+
+class ColorModal extends Modal {
+  private value: string;
+  private saveButton!: ButtonComponent;
+  private textComponent!: TextComponent;
+  private colorComponent!: ColorComponent;
+  private preview!: HTMLElement;
+
+  constructor(
+    app: App,
+    initial: TabGroupColor,
+    private onSubmit: (color: TabGroupColor) => void,
+  ) {
+    super(app);
+    this.value = resolveColor(initial);
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(t("colorTitle"));
+    this.contentEl.addClass("tb-color-modal");
+
+    const swatches = this.contentEl.createDiv({ cls: "tb-color-swatches" });
+    for (const color of COLOR_ORDER) {
+      const swatch = swatches.createEl("button", {
+        cls: "tb-color-swatch",
+        attr: { type: "button", title: color, "aria-label": color },
+      });
+      swatch.style.backgroundColor = GROUP_COLORS[color];
+      swatch.toggleClass("tb-color-swatch-selected", resolveColor(color) === this.value);
+      swatch.addEventListener("click", () => {
+        this.onSubmit(color);
+        this.close();
+      });
+    }
+
+    new Setting(this.contentEl)
+      .setName(t("colorCustomLabel"))
+      .setDesc(t("colorCustomDesc"))
+      .addColorPicker((picker) => {
+        this.colorComponent = picker;
+        picker.setValue(this.value).onChange((next) => this.updateFromPicker(next));
+      })
+      .addText((text) => {
+        this.textComponent = text;
+        text
+          .setValue(this.value)
+          .setPlaceholder(t("colorInputPlaceholder"))
+          .onChange((next) => this.updateFromText(next));
+        text.inputEl.addEventListener("keydown", (evt) => {
+          if (evt.isComposing || evt.keyCode === 229) return;
+          if (evt.key === "Enter") this.submit();
+        });
+      });
+
+    this.preview = this.contentEl.createDiv({ cls: "tb-color-preview tb-chip" });
+    this.preview.style.setProperty("--tb-color", this.value);
+    this.preview.createSpan({ cls: "tb-chip-dot" });
+    this.preview.createSpan({ cls: "tb-chip-name", text: t("colorPreview") });
+
+    new Setting(this.contentEl).addButton((button) => {
+      this.saveButton = button;
+      button.setButtonText(t("colorSave")).setCta().onClick(() => this.submit());
+    });
+  }
+
+  private updateFromPicker(next: string): void {
+    const parsed = parseColorInput(next);
+    if (!parsed) return;
+    this.value = parsed;
+    this.textComponent.setValue(parsed);
+    this.setValidState(true);
+    this.preview.style.setProperty("--tb-color", parsed);
+  }
+
+  private updateFromText(next: string): void {
+    const parsed = parseColorInput(next);
+    this.setValidState(parsed !== null);
+    if (!parsed) return;
+    this.value = parsed;
+    this.colorComponent.setValue(parsed);
+    this.preview.style.setProperty("--tb-color", parsed);
+  }
+
+  private setValidState(valid: boolean): void {
+    this.saveButton.setDisabled(!valid);
+    this.textComponent.inputEl.toggleClass("tb-color-input-invalid", !valid);
+    this.textComponent.inputEl.setAttribute("aria-invalid", String(!valid));
+  }
+
+  private submit(): void {
+    const parsed = parseColorInput(this.textComponent.getValue());
+    if (!parsed) return;
+    this.onSubmit(parsed as TabGroupColor);
+    this.close();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
   }
 }
